@@ -44,8 +44,17 @@ const app = express();
 
 // Security Middleware
 app.use(helmet());
+// Support comma-separated CORS_ORIGIN for multiple allowed origins (e.g. Vercel preview + production URLs)
+const _corsAllowed = (process.env.CORS_ORIGIN || 'http://localhost:3000')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+  origin: (origin, cb) => {
+    // Allow requests with no origin (curl, mobile apps, same-origin)
+    if (!origin || _corsAllowed.includes(origin)) return cb(null, true);
+    cb(new Error(`CORS: origin '${origin}' not allowed`));
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: [
@@ -112,7 +121,9 @@ const { doubleCsrfProtection, generateCsrfToken } = doubleCsrf({
   getSecret: () => process.env.COOKIE_SECRET,
   cookieName: 'csrfToken',           // matches getCookieValue('csrfToken') in client.js
   cookieOptions: {
-    sameSite: 'strict',
+    // Cross-domain (Vercel frontend → separate backend host) requires sameSite:'none' + secure:true.
+    // In development keep 'strict' to avoid HTTPS requirement on localhost.
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'strict',
     secure: process.env.NODE_ENV === 'production',
     httpOnly: false,                 // must be false so JS can read and send in header
     path: '/',

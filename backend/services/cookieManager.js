@@ -20,10 +20,12 @@ class CookieManagerService extends BaseService {
    */
   setSecureCookie(res, name, value, options = {}) {
     return this.executeWithTracking('setSecureCookie', async () => {
+      const isProd = process.env.NODE_ENV === 'production';
       const config = {
         httpOnly: true, // Prevent XSS access
-        secure: process.env.NODE_ENV === 'production', // HTTPS only in production
-        sameSite: 'strict', // CSRF protection
+        secure: isProd, // HTTPS only in production
+        // Cross-domain (Vercel frontend → remote backend) requires sameSite:'none'; dev uses 'strict'
+        sameSite: isProd ? 'none' : 'strict',
         path: '/',
         maxAge: options.maxAge || 24 * 60 * 60 * 1000, // 24 hours default
         ...options
@@ -135,10 +137,11 @@ class CookieManagerService extends BaseService {
     return this.executeWithTracking('setRefreshTokenCookie', async () => {
       const maxAge = expiryDays * 24 * 60 * 60 * 1000;
 
+      const isProd = process.env.NODE_ENV === 'production';
       return this.setSecureCookie(res, 'refreshToken', refreshToken, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
+        secure: isProd,
+        sameSite: isProd ? 'none' : 'strict',
         path: '/api/auth',
         maxAge,
         domain: this.getCookieDomain()
@@ -154,10 +157,11 @@ class CookieManagerService extends BaseService {
    */
   setCsrfTokenCookie(res, csrfToken) {
     return this.executeWithTracking('setCsrfTokenCookie', async () => {
+      const isProd = process.env.NODE_ENV === 'production';
       res.cookie('csrfToken', csrfToken, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
+        secure: isProd,
+        sameSite: isProd ? 'none' : 'strict',
         path: '/',
         maxAge: 30 * 60 * 1000 // 30 minutes
       });
