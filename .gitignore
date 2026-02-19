@@ -19,3 +19,6 @@ backend/logs/
 # Snyk result cache and binary
 snyk-code.json
 snyk.exe
+
+# Supabase local setup script (contains credentials — never commit)
+setup-supabase.ps1
