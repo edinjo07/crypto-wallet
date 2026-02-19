@@ -69,7 +69,6 @@ function Dashboard() {
     setMobileMenuOpen(false);
   };
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     loadDashboardData();
     loadPrices();
@@ -87,6 +86,7 @@ function Dashboard() {
       clearInterval(recoveryInterval);
       clearInterval(notificationInterval);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
