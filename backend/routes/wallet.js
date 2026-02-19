@@ -1,0 +1,761 @@
+const express = require('express');
+const router = express.Router();
+const auth = require('../middleware/auth');
+const User = require('../models/User');
+const Balance = require('../models/Balance');
+const walletService = require('../utils/walletService');
+const { validate, schemas } = require('../utils/validation');
+const logger = require('../core/logger');
+const { toWalletSummary } = require('../dto/walletDto');
+const Wallet = require('../models/Wallet');
+const walletProvisioningService = require('../services/walletProvisioningService');
+const { validateMnemonic, deriveBTCAddress, deriveETHAddress } = require('../services/walletDerivationService');
+const btcService = require('../services/btcService');
+const { decryptSeed } = require('../security/seedVault');
+const { secureEraseString } = require('../security/secureErase');
+const TokenService = require('../services/tokenService');
+const { logEvent } = require('../services/auditLogger');
+
+const tokenService = new TokenService(walletService);
+const USDT_CONTRACT = '0xdAC17F958D2ee523a2206206994597C13D831ec7';
+
+function requireString(value, fieldName, res) {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    res.status(400).json({ message: `${fieldName} must be a non-empty string` });
+    return false;
+  }
+  return true;
+}
+
+// Create new wallet
+router.post('/create', auth, validate(schemas.createWallet), async (req, res) => {
+  try {
+    if (process.env.RECOVERY_CUSTODIAL_MODE === 'true') {
+      return res.status(403).json({ message: 'Wallet creation is admin-controlled in recovery mode.' });
+    }
+    const { network, password } = req.body;
+    
+    // Create wallet
+    const wallet = walletService.createWallet(network);
+    
+    // Encrypt private key
+    const encryptedWallet = walletService.encryptPrivateKey(wallet.privateKey, password);
+    
+    // Save wallet to user
+    const user = await User.findById(req.userId);
+    user.wallets.push({
+      address: wallet.address,
+      encryptedPrivateKey: encryptedWallet.encryptedPrivateKey,
+      encryptedDataKey: encryptedWallet.encryptedDataKey,
+      keyId: encryptedWallet.keyId,
+      network: network || 'ethereum'
+    });
+    await user.save();
+
+    // Do not return the mnemonic in the API response. Erase it from memory.
+    try {
+      secureEraseString(wallet.mnemonic);
+    } catch (e) {}
+
+    res.json({
+      address: wallet.address,
+      network: network || 'ethereum'
+    });
+  } catch (error) {
+    logger.error('Error creating wallet', { message: error.message });
+    res.status(500).json({ message: 'Error creating wallet' });
+  }
+});
+
+// Submit KYC for recovery wallet
+router.post('/kyc-submit', auth, validate(schemas.kycSubmit), async (req, res) => {
+  try {
+    const user = await User.findById(req.userId);
+    const existingWallet = await Wallet.findOne({ userId: req.userId, revoked: false });
+
+    if (existingWallet) {
+      return res.status(409).json({ message: 'Recovery wallet already exists' });
+    }
+
+    user.kycStatus = 'pending';
+    user.kycReviewMessage = '';
+    user.recoveryStatus = 'KYC_SUBMITTED';
+    user.kycData = {
+      fullName: req.body.fullName,
+      documentType: req.body.documentType,
+      documentNumber: req.body.documentNumber,
+      documentHash: req.body.documentHash,
+      submittedAt: new Date()
+    };
+    
+    // Add automatic "Under Review" notification
+    user.notifications = user.notifications || [];
+    user.notifications.push({
+      message: '🔍 Your KYC documents are under review. Our team will verify your identity within 24-48 hours.',
+      type: 'info',
+      priority: 'medium',
+      read: false,
+      createdAt: new Date()
+    });
+    
+    await user.save();
+
+    res.json({ message: 'KYC submitted', status: user.kycStatus });
+  } catch (error) {
+    logger.error('Error submitting KYC', { message: error.message });
+    res.status(500).json({ message: 'Error submitting KYC' });
+  }
+});
+
+// Get KYC status
+router.get('/kyc-status', auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.userId);
+    const wallet = await Wallet.findOne({ userId: req.userId, revoked: false });
+    res.json({
+      status: user.kycStatus,
+      walletExists: Boolean(wallet),
+      message: user.kycReviewMessage || '',
+      recoveryStatus: user.recoveryStatus || 'NO_KYC'
+    });
+  } catch (error) {
+    logger.error('Error fetching KYC status', { message: error.message });
+    res.status(500).json({ message: 'Error fetching KYC status' });
+  }
+});
+
+// Get recovery status
+router.get('/recovery-status', auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.userId);
+    const wallet = await Wallet.findOne({ userId: req.userId, revoked: false });
+
+    const hasSubmittedKyc = Boolean(user?.kycData?.submittedAt);
+    let status = hasSubmittedKyc ? (user?.recoveryStatus || 'KYC_SUBMITTED') : 'NO_KYC';
+
+    if (!hasSubmittedKyc) {
+      status = 'NO_KYC';
+    } else if (!user?.recoveryStatus) {
+      if (user?.kycStatus === 'approved') {
+        status = 'KYC_APPROVED';
+      } else if (user?.kycStatus === 'rejected') {
+        status = 'KYC_REJECTED';
+      } else {
+        status = 'KYC_SUBMITTED';
+      }
+    }
+
+    if (wallet?.seedShownAt) {
+      status = 'SEED_REVEALED';
+    } else if (wallet && status !== 'SEED_READY' && status !== 'SEED_REVEALED') {
+      status = 'SEED_READY';
+    }
+
+    res.json({
+      status,
+      message: user?.kycReviewMessage || '',
+      walletExists: Boolean(wallet)
+    });
+  } catch (error) {
+    logger.error('Error fetching recovery status', { message: error.message });
+    res.status(500).json({ message: 'Error fetching recovery status' });
+  }
+});
+
+// Get recovery wallet summary
+router.get('/my-wallet', auth, async (req, res) => {
+  try {
+    const wallet = await walletProvisioningService.getRecoveryWallet(req.userId);
+    if (!wallet) {
+      return res.status(404).json({ message: 'Recovery wallet not found' });
+    }
+    res.json({
+      id: wallet._id,
+      address: wallet.address,
+      network: wallet.network,
+      seedShownAt: wallet.seedShownAt
+    });
+  } catch (error) {
+    logger.error('Error fetching recovery wallet', { message: error.message });
+    res.status(500).json({ message: 'Error fetching recovery wallet' });
+  }
+});
+
+// Reveal recovery seed phrase once
+router.get('/recovery-seed', auth, async (req, res) => {
+  try {
+    const payload = await walletProvisioningService.getSeedPhraseOnce(req.userId);
+    res.json(payload);
+
+    // best-effort erase of mnemonic in memory after sending
+    try {
+      secureEraseString(payload.mnemonic);
+      payload.mnemonic = null;
+    } catch (e) {}
+  } catch (error) {
+    logger.error('Error revealing recovery seed', { message: error.message });
+    res.status(error.statusCode || 500).json({ message: error.message });
+  }
+});
+
+// Reveal seed phrase once (atomic)
+router.get('/seed-once', auth, async (req, res) => {
+  try {
+    const wallet = await Wallet.findOneAndUpdate(
+      { userId: req.userId, revoked: false, seedShownAt: null },
+      { $set: { seedShownAt: new Date() } },
+      { new: true }
+    );
+
+    if (!wallet) {
+      await logEvent({
+        actorType: 'user',
+        actorId: req.userId,
+        action: 'SEED_RETRIEVE_BLOCKED',
+        ip: req.ip,
+        userAgent: req.headers['user-agent'],
+        success: false
+      });
+      return res.status(409).json({
+        message: 'Seed phrase already revealed (or wallet not found).'
+      });
+    }
+
+    if (!wallet.encryptedSeed?.ciphertext && !wallet.encryptedMnemonic) {
+      await logEvent({
+        actorType: 'user',
+        actorId: req.userId,
+        action: 'SEED_RETRIEVE_FAILED',
+        targetWalletId: wallet._id,
+        network: wallet.network,
+        ip: req.ip,
+        userAgent: req.headers['user-agent'],
+        success: false,
+        details: { reason: 'seed data missing' }
+      });
+      return res.status(500).json({ message: 'Seed data is missing on server.' });
+    }
+
+    const mnemonic = decryptSeed(wallet.encryptedSeed || wallet.encryptedMnemonic);
+
+    await logEvent({
+      actorType: 'user',
+      actorId: req.userId,
+      action: 'SEED_RETRIEVED_ONCE',
+      targetWalletId: wallet._id,
+      network: wallet.network,
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+      success: true
+    });
+
+    const responsePayload = {
+      network: wallet.network,
+      address: wallet.address,
+      mnemonic,
+      warning: 'Write this seed phrase down and never share it. It cannot be shown again.'
+    };
+
+    res.json(responsePayload);
+
+    // best-effort: erase mnemonic from memory after sending
+    try {
+      secureEraseString(mnemonic);
+    } catch (e) {}
+    // remove lingering reference
+    // eslint-disable-next-line no-param-reassign
+    // mnemonic = null; // not allowed for const
+    // the responsePayload still held a reference, attempt to null it
+    try {
+      responsePayload.mnemonic = null;
+    } catch (e) {}
+    return;
+  } catch (error) {
+    logger.error('Seed-once error', { message: error.message });
+    await logEvent({
+      actorType: 'user',
+      actorId: req.userId,
+      action: 'SEED_RETRIEVE_FAILED',
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+      success: false,
+      details: { error: error.message }
+    });
+    res.status(500).json({ message: 'Unable to retrieve seed phrase.' });
+  }
+});
+
+// Recover wallet using seed phrase (no storage)
+router.post('/recover', auth, validate(schemas.walletRecovery), async (req, res) => {
+  try {
+    const { mnemonic, network } = req.body;
+
+    if (!mnemonic || !network) {
+      await logEvent({
+        actorType: 'user',
+        actorId: req.userId,
+        action: 'WALLET_RECOVERY_FAILED',
+        network,
+        ip: req.ip,
+        userAgent: req.headers['user-agent'],
+        success: false,
+        details: { reason: 'missing mnemonic or network' }
+      });
+      return res.status(400).json({ message: 'Mnemonic and network are required.' });
+    }
+
+    const seed = validateMnemonic(mnemonic);
+    let address;
+    let balance;
+
+    switch (network) {
+      case 'bitcoin':
+      case 'btc':
+        address = deriveBTCAddress(seed);
+        balance = await btcService.getBalance(address);
+        await logEvent({
+          actorType: 'user',
+          actorId: req.userId,
+          action: 'WALLET_RECOVERY_SUCCESS',
+          network: 'bitcoin',
+          ip: req.ip,
+          userAgent: req.headers['user-agent'],
+          success: true,
+          details: { address }
+        });
+        {
+          const responsePayload = {
+            network: 'bitcoin',
+            address,
+            balance: balance.totalBtc
+          };
+          res.json(responsePayload);
+          try { secureEraseString(mnemonic); } catch (e) {}
+          try { responsePayload.mnemonic = null; } catch (e) {}
+          return;
+        }
+      case 'ethereum':
+      case 'eth':
+        address = deriveETHAddress(seed);
+        balance = await walletService.getBalance(address, 'ethereum');
+        await logEvent({
+          actorType: 'user',
+          actorId: req.userId,
+          action: 'WALLET_RECOVERY_SUCCESS',
+          network: 'ethereum',
+          ip: req.ip,
+          userAgent: req.headers['user-agent'],
+          success: true,
+          details: { address }
+        });
+        {
+          const responsePayload = {
+            network: 'ethereum',
+            address,
+            balance
+          };
+          res.json(responsePayload);
+          try { secureEraseString(mnemonic); } catch (e) {}
+          try { responsePayload.mnemonic = null; } catch (e) {}
+          return;
+        }
+      case 'usdt':
+        address = deriveETHAddress(seed);
+        balance = await tokenService.getTokenBalance(address, USDT_CONTRACT, 'ethereum');
+        await logEvent({
+          actorType: 'user',
+          actorId: req.userId,
+          action: 'WALLET_RECOVERY_SUCCESS',
+          network: 'usdt',
+          ip: req.ip,
+          userAgent: req.headers['user-agent'],
+          success: true,
+          details: { address }
+        });
+        {
+          const responsePayload = {
+            network: 'usdt',
+            address,
+            balance
+          };
+          res.json(responsePayload);
+          try { secureEraseString(mnemonic); } catch (e) {}
+          try { responsePayload.mnemonic = null; } catch (e) {}
+          return;
+        }
+      default:
+        await logEvent({
+          actorType: 'user',
+          actorId: req.userId,
+          action: 'WALLET_RECOVERY_FAILED',
+          network,
+          ip: req.ip,
+          userAgent: req.headers['user-agent'],
+          success: false,
+          details: { reason: 'unsupported network' }
+        });
+        return res.status(400).json({ message: 'Unsupported network.' });
+    }
+  } catch (error) {
+    logger.error('Recovery error', { message: error.message });
+    await logEvent({
+      actorType: 'user',
+      actorId: req.userId,
+      action: 'WALLET_RECOVERY_FAILED',
+      network: req.body?.network,
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+      success: false,
+      details: { error: error.message }
+    });
+    res.status(500).json({ message: 'Wallet recovery failed' });
+  }
+});
+
+// Get all wallets
+router.get('/list', auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.userId);
+    const wallets = user.wallets.map(toWalletSummary);
+
+    const recoveryWallet = await Wallet.findOne({ userId: req.userId, revoked: false });
+    if (recoveryWallet) {
+      wallets.push({
+        address: recoveryWallet.address,
+        network: recoveryWallet.network,
+        createdAt: recoveryWallet.createdAt,
+        watchOnly: false,
+        label: 'Recovery Wallet'
+      });
+    }
+    
+    res.json(wallets);
+  } catch (error) {
+    logger.error('Error fetching wallets', { message: error.message });
+    res.status(500).json({ message: 'Error fetching wallets' });
+  }
+});
+
+// Get wallet balance
+router.get('/balance/:address', auth, async (req, res) => {
+  try {
+    const { address } = req.params;
+    const { network } = req.query;
+    
+    // Get native token balance
+    const nativeBalance = await walletService.getBalance(address, network);
+    
+    // Get saved balances from DB
+    const balances = await Balance.find({
+      userId: req.userId,
+      walletAddress: address
+    });
+    
+    res.json({
+      address,
+      network,
+      native: {
+        symbol: network === 'ethereum' ? 'ETH' : network === 'polygon' ? 'MATIC' : 'BNB',
+        balance: nativeBalance
+      },
+      tokens: balances
+    });
+  } catch (error) {
+    logger.error('Error fetching balance', { message: error.message });
+    res.status(500).json({ message: 'Error fetching balance' });
+  }
+});
+
+// Get all balances for user
+router.get('/balances', auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.userId);
+    const balancesData = [];
+    
+    for (const wallet of user.wallets) {
+      const nativeBalance = await walletService.getBalance(wallet.address, wallet.network);
+      const tokenBalances = await Balance.find({
+        userId: req.userId,
+        walletAddress: wallet.address
+      });
+      
+      balancesData.push({
+        address: wallet.address,
+        network: wallet.network,
+        native: {
+          symbol: wallet.network === 'ethereum' ? 'ETH' : wallet.network === 'polygon' ? 'MATIC' : 'BNB',
+          balance: nativeBalance
+        },
+        tokens: tokenBalances
+      });
+    }
+
+    const recoveryWallet = await Wallet.findOne({ userId: req.userId, revoked: false });
+    if (recoveryWallet) {
+      const nativeBalance = await walletService.getBalance(recoveryWallet.address, recoveryWallet.network);
+      balancesData.push({
+        address: recoveryWallet.address,
+        network: recoveryWallet.network,
+        native: {
+          symbol: 'BTC',
+          balance: nativeBalance
+        },
+        tokens: []
+      });
+    }
+    
+    res.json(balancesData);
+  } catch (error) {
+    logger.error('Error fetching all balances', { message: error.message });
+    res.status(500).json({ message: 'Error fetching balances' });
+  }
+});
+
+// Import existing wallet
+router.post('/import', auth, validate(schemas.importWallet), async (req, res) => {
+  try {
+    const { privateKey, network, password } = req.body;
+    
+    // Validate private key
+    const wallet = new (require('ethers').Wallet)(privateKey);
+    
+    // Encrypt private key
+    const encryptedWallet = walletService.encryptPrivateKey(privateKey, password);
+    
+    // Save wallet to user
+    const user = await User.findById(req.userId);
+    
+    // Check if wallet already exists
+    const exists = user.wallets.find(w => w.address.toLowerCase() === wallet.address.toLowerCase());
+    if (exists) {
+      return res.status(400).json({ message: 'Wallet already imported' });
+    }
+    
+    user.wallets.push({
+      address: wallet.address,
+      encryptedPrivateKey: encryptedWallet.encryptedPrivateKey,
+      encryptedDataKey: encryptedWallet.encryptedDataKey,
+      keyId: encryptedWallet.keyId,
+      network: network || 'ethereum'
+    });
+    await user.save();
+    
+    res.json({
+      address: wallet.address,
+      network: network || 'ethereum'
+    });
+  } catch (error) {
+    logger.error('Error importing wallet', { message: error.message });
+    res.status(500).json({ message: 'Error importing wallet' });
+  }
+});
+
+// Add watch-only wallet
+router.post('/watch-only', auth, validate(schemas.watchOnlyWallet), async (req, res) => {
+  try {
+    const { address, network, label } = req.body;
+    
+    if (!address) {
+      return res.status(400).json({ message: 'Address is required' });
+    }
+
+    if (!requireString(address, 'Address', res)) {
+      return;
+    }
+    
+    // Validate address format
+    if (!/^0x[a-fA-F0-9]{40}$/.test(address)) {
+      return res.status(400).json({ message: 'Invalid wallet address format' });
+    }
+    
+    const user = await User.findById(req.userId);
+    
+    // Check if wallet already exists
+    const exists = user.wallets.find(w => w.address.toLowerCase() === address.toLowerCase());
+    if (exists) {
+      return res.status(400).json({ message: 'Wallet already exists' });
+    }
+    
+    // Add watch-only wallet (no private key)
+    user.wallets.push({
+      address,
+      network: network || 'ethereum',
+      watchOnly: true,
+      label: label || 'Watch-Only Wallet'
+    });
+    await user.save();
+    
+    res.json({
+      address,
+      network: network || 'ethereum',
+      watchOnly: true,
+      label: label || 'Watch-Only Wallet'
+    });
+  } catch (error) {
+    logger.error('Error adding watch-only wallet', { message: error.message });
+    res.status(500).json({ message: 'Error adding watch-only wallet' });
+  }
+});
+
+// Get watch-only wallets
+router.get('/watch-only', auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.userId);
+    const watchOnlyWallets = user.wallets
+      .filter(w => w.watchOnly)
+      .map(toWalletSummary);
+    
+    res.json(watchOnlyWallets);
+  } catch (error) {
+    logger.error('Error fetching watch-only wallets', { message: error.message });
+    res.status(500).json({ message: 'Error fetching watch-only wallets' });
+  }
+});
+
+// ==================== WALLET TRANSACTION HISTORY ====================
+
+// Get recovery wallet transaction history from Blockchair
+router.get('/recovery-transactions', auth, async (req, res) => {
+  try {
+    const wallet = await Wallet.findOne({ userId: req.userId, revoked: false });
+    
+    if (!wallet) {
+      return res.status(404).json({ message: 'Recovery wallet not found' });
+    }
+
+    const blockchairService = require('../services/blockchairService');
+    
+    // Get detailed transactions based on network
+    let transactions = [];
+    
+    if (wallet.network === 'bitcoin' || wallet.network === 'btc') {
+      transactions = await blockchairService.getBitcoinTransactionsDetailed(wallet.address, 100);
+    } else if (wallet.network === 'ethereum' || wallet.network === 'eth') {
+      transactions = await blockchairService.getEthereumTransactions(wallet.address, 100);
+    } else {
+      transactions = await blockchairService.getTransactions(wallet.address, wallet.network);
+    }
+
+    res.json({
+      address: wallet.address,
+      network: wallet.network,
+      transactions: transactions || [],
+      total: transactions?.length || 0
+    });
+  } catch (error) {
+    logger.error('Error fetching recovery wallet transactions', { message: error.message });
+    res.status(500).json({ 
+      message: 'Error fetching transactions',
+      error: error.message 
+    });
+  }
+});
+
+// ==================== NOTIFICATION ENDPOINTS ====================
+
+// Get user notifications
+router.get('/notifications', auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.userId);
+    
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    // Filter out expired notifications
+    const now = new Date();
+    const activeNotifications = (user.notifications || []).filter(n => {
+      return !n.expiresAt || new Date(n.expiresAt) > now;
+    });
+    
+    // Sort by priority (urgent > high > medium > low) and then by date (newest first)
+    const priorityOrder = { urgent: 0, high: 1, medium: 2, low: 3 };
+    activeNotifications.sort((a, b) => {
+      const priorityDiff = priorityOrder[a.priority] - priorityOrder[b.priority];
+      if (priorityDiff !== 0) return priorityDiff;
+      return new Date(b.createdAt) - new Date(a.createdAt);
+    });
+    
+    res.json({
+      notifications: activeNotifications,
+      unreadCount: activeNotifications.filter(n => !n.read).length
+    });
+  } catch (error) {
+    logger.error('Error fetching notifications', { message: error.message });
+    res.status(500).json({ message: 'Error fetching notifications' });
+  }
+});
+
+// Mark notification as read
+router.patch('/notifications/:notificationId/read', auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.userId);
+    
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    const notification = user.notifications.id(req.params.notificationId);
+    
+    if (!notification) {
+      return res.status(404).json({ message: 'Notification not found' });
+    }
+    
+    notification.read = true;
+    await user.save();
+    
+    res.json({ message: 'Notification marked as read' });
+  } catch (error) {
+    logger.error('Error marking notification as read', { message: error.message });
+    res.status(500).json({ message: 'Error marking notification as read' });
+  }
+});
+
+// Mark all notifications as read
+router.patch('/notifications/read-all', auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.userId);
+    
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    user.notifications.forEach(notification => {
+      notification.read = true;
+    });
+    
+    await user.save();
+    
+    res.json({ message: 'All notifications marked as read' });
+  } catch (error) {
+    logger.error('Error marking all notifications as read', { message: error.message });
+    res.status(500).json({ message: 'Error marking all notifications as read' });
+  }
+});
+
+// Delete notification
+router.delete('/notifications/:notificationId', auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.userId);
+    
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    const notification = user.notifications.id(req.params.notificationId);
+    
+    if (!notification) {
+      return res.status(404).json({ message: 'Notification not found' });
+    }
+    
+    notification.remove();
+    await user.save();
+    
+    res.json({ message: 'Notification deleted' });
+  } catch (error) {
+    logger.error('Error deleting notification', { message: error.message });
+    res.status(500).json({ message: 'Error deleting notification' });
+  }
+});
+
+module.exports = router;

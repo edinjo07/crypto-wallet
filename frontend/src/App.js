@@ -1,0 +1,68 @@
+import React from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import Dashboard from './components/Dashboard';
+import Login from './components/Login';
+import AdminLogin from './components/AdminLogin';
+import Register from './components/Register';
+import Navbar from './components/Navbar';
+import AdminDashboard from './components/AdminDashboardNew';
+import RecoverWalletPage from './components/RecoverWalletPage';
+import RequireAuth from './auth/RequireAuth';
+import RequireAdmin from './auth/RequireAdmin';
+import { useAuth } from './auth/useAuth';
+
+function App() {
+  const { isAuthenticated, user, logout } = useAuth();
+
+  return (
+    <Router>
+      <div className="app-container">
+        {isAuthenticated && <Navbar user={user} onLogout={logout} />}
+        <Routes>
+          <Route 
+            path="/login" 
+            element={!isAuthenticated ? <Login /> : <Navigate to="/dashboard" />} 
+          />
+          <Route 
+            path="/admin-login" 
+            element={!isAuthenticated ? <AdminLogin /> : <Navigate to="/admin" />} 
+          />
+          <Route 
+            path="/register" 
+            element={!isAuthenticated ? <Register /> : <Navigate to="/dashboard" />} 
+          />
+          <Route 
+            path="/dashboard" 
+            element={
+              <RequireAuth>
+                <Dashboard />
+              </RequireAuth>
+            } 
+          />
+          <Route
+            path="/recover-wallet"
+            element={
+              <RequireAuth>
+                <RecoverWalletPage />
+              </RequireAuth>
+            }
+          />
+          <Route 
+            path="/admin" 
+            element={
+              <RequireAdmin>
+                <AdminDashboard />
+              </RequireAdmin>
+            } 
+          />
+          <Route 
+            path="/" 
+            element={<Navigate to={isAuthenticated ? "/dashboard" : "/login"} />} 
+          />
+        </Routes>
+      </div>
+    </Router>
+  );
+}
+
+export default App;
