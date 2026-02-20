@@ -24,7 +24,7 @@ const transactionSchema = new mongoose.Schema({
   txHash: String,
   network: {
     type: String,
-    enum: ['ethereum', 'polygon', 'bsc', 'bitcoin', 'btc'],
+    enum: ['ethereum', 'polygon', 'bsc', 'bitcoin', 'btc', 'litecoin', 'dogecoin'],
     default: 'ethereum'
   },
   status: {

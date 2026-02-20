@@ -98,7 +98,7 @@ const userSchema = new mongoose.Schema({
     keyId: String,
     network: {
       type: String,
-      enum: ['ethereum', 'polygon', 'bsc', 'bitcoin', 'btc'],
+      enum: ['ethereum', 'polygon', 'bsc', 'bitcoin', 'btc', 'litecoin', 'dogecoin'],
       default: 'ethereum'
     },
     watchOnly: {

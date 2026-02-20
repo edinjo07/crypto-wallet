@@ -383,16 +383,37 @@ function AdminDashboardNew() {
   // ── Wallet Import ──────────────────────────────────────────────────────────
   const handleImportWallet = useCallback(async (e) => {
     e.preventDefault();
-    if (!walletImport.userId || !walletImport.address) {
-      setWalletImport((s) => ({ ...s, error: 'User ID and wallet address are required.' }));
-      return;
-    }
-    setWalletImport((s) => ({ ...s, loading: true, error: '', result: null }));
+    let validationError = '';
+    setWalletImport((s) => {
+      if (!s.userId.trim() || !s.address.trim()) {
+        validationError = 'User ID and wallet address are required.';
+      }
+      // BTC address format check
+      if (!validationError && (s.chain === 'bitcoin' || s.chain === 'btc')) {
+        const addr = s.address.trim();
+        if (!/^(bc1|[13])[a-zA-HJ-NP-Z0-9]{25,62}$/.test(addr)) {
+          validationError = 'Invalid Bitcoin address. Must start with 1, 3, or bc1.';
+        }
+      }
+      // ETH address format check
+      if (!validationError && (s.chain === 'ethereum' || s.chain === 'bsc' || s.chain === 'polygon')) {
+        if (!/^0x[0-9a-fA-F]{40}$/.test(s.address.trim())) {
+          validationError = 'Invalid Ethereum address. Must be 0x followed by 40 hex characters.';
+        }
+      }
+      if (validationError) return { ...s, error: validationError };
+      return { ...s, loading: true, error: '', result: null };
+    });
+    if (validationError) return;
+
+    // Read current values after state update via a ref-less approach: re-read from event form
+    const form = e.target;
+    const userId  = form.querySelector('input[placeholder*="User ID"]').value.trim();
+    const address = form.querySelector('input[placeholder*="address"]').value.trim();
+    const chain   = form.querySelector('select').value;
+
     try {
-      const res = await adminAPI.importWallet(walletImport.userId, {
-        address: walletImport.address,
-        chain: walletImport.chain
-      });
+      const res = await adminAPI.importWallet(userId, { address, chain });
       setWalletImport((s) => ({ ...s, loading: false, result: res.data }));
     } catch (err) {
       setWalletImport((s) => ({
@@ -400,7 +421,7 @@ function AdminDashboardNew() {
         error: err.response?.data?.message || 'Import failed.'
       }));
     }
-  }, [walletImport]);
+  }, []);
 
   // ── Edit Balance ───────────────────────────────────────────────────────────
   const handleUpdateBalance = useCallback(async (userId, address, btc, usd) => {
@@ -668,7 +689,16 @@ function AdminDashboardNew() {
 
                 {walletImport.result && (
                   <div style={{ marginTop: 12, padding: '12px 16px', borderRadius: 8, background: 'rgba(22,163,74,0.1)', border: '1px solid rgba(22,163,74,0.3)' }}>
-                    <div style={{ fontWeight: 700, color: 'var(--success)', marginBottom: 6 }}>✓ {walletImport.result.message}</div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div style={{ fontWeight: 700, color: 'var(--success)', marginBottom: 6 }}>✓ {walletImport.result.message}</div>
+                      <button
+                        className="rw-btn rw-btn-secondary"
+                        style={{ padding: '2px 10px', fontSize: '0.78rem' }}
+                        onClick={() => setWalletImport((s) => ({ ...s, result: null, address: '', userId: '' }))}
+                      >
+                        Clear
+                      </button>
+                    </div>
                     <div className="rw-admin-modal-grid" style={{ gap: 8 }}>
                       <div><strong>Address:</strong> <span style={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{walletImport.result.address}</span></div>
                       <div><strong>Chain:</strong> {walletImport.result.chain}</div>

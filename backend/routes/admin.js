@@ -1022,98 +1022,187 @@ router.post('/users/:id/wallet-import', adminAuth, adminGuard(), async (req, res
 
     const cleanAddress = address.trim();
 
+    // Basic address format validation
+    const isBtcChain = chain === 'bitcoin' || chain === 'btc' || chain === 'litecoin' || chain === 'dogecoin';
+    const isEthChain = chain === 'ethereum' || chain === 'eth' || chain === 'bsc' || chain === 'polygon';
+    if (isBtcChain && !/^(bc1|[13])[a-zA-HJ-NP-Z0-9]{25,62}$|^[LM][a-km-zA-HJ-NP-Z1-9]{26,33}$|^D[5-9A-HJ-NP-U][1-9A-HJ-NP-Za-km-z]{32}$/.test(cleanAddress)) {
+      if (chain === 'bitcoin' && !/^(bc1|[13])[a-zA-HJ-NP-Z0-9]{25,62}$/.test(cleanAddress)) {
+        return res.status(400).json({ message: 'Invalid Bitcoin address format. Must start with 1, 3, or bc1.' });
+      }
+    }
+    if (isEthChain && !/^0x[0-9a-fA-F]{40}$/.test(cleanAddress)) {
+      return res.status(400).json({ message: `Invalid ${chain} address format. Must be 0x followed by 40 hex characters.` });
+    }
+
     const user = await User.findById(req.params.id);
     if (!user) return res.status(404).json({ message: 'User not found.' });
 
     const blockchairService = require('../services/blockchairService');
+    const axios = require('axios');
 
-    // Fetch balance and detailed transactions from Blockchair
     let balanceSats = 0;
-    let balanceBtc = 0;
-    let txCount = 0;
-    let importedTxs = 0;
-
-    // Always attempt detailed fetch
+    let balanceBtc  = 0;
+    let txCount     = 0;
+    let txHashes    = [];
     let detailedTxs = [];
+
+    // ── One single dashboard call — extracts both balance AND tx hash list ────
     try {
-      detailedTxs = await blockchairService.getBitcoinTransactionsDetailed(cleanAddress, 50);
-    } catch (_) {
-      detailedTxs = [];
+      const dashboard = await blockchairService.getAddressDashboard(cleanAddress, chain);
+      if (dashboard && dashboard[cleanAddress]) {
+        const addrData = dashboard[cleanAddress].address || {};
+        const confirmed   = addrData.balance            || 0;
+        const unconfirmed = addrData.unconfirmed_balance || 0;
+        balanceSats = confirmed + unconfirmed;
+        balanceBtc  = balanceSats / 1e8;
+        txCount     = addrData.transaction_count || 0;
+        // Collect up to 25 tx hashes
+        txHashes    = (dashboard[cleanAddress].transactions || []).slice(0, 25);
+      }
+    } catch (err) {
+      logger.warn('admin_wallet_import_dashboard_error', { message: err.message, address: cleanAddress });
     }
 
-    // Fetch balance separately
-    try {
-      const balData = await blockchairService.getBitcoinBalance(cleanAddress);
-      balanceSats = balData.totalSats || 0;
-      balanceBtc  = balData.totalBtc  || 0;
-      txCount     = balData.transactionCount || 0;
-    } catch (_) {
-      // balance fetch failed — continue with 0
+    // ── Fetch individual transaction details in a single batch call ────────
+    // Blockchair supports up to 10 tx hashes per /dashboards/transactions/ call
+    if (txHashes.length > 0 && (chain === 'bitcoin' || chain === 'btc')) {
+      try {
+        const BATCH_SIZE = 10;
+        const batches = [];
+        for (let i = 0; i < txHashes.length; i += BATCH_SIZE) {
+          batches.push(txHashes.slice(i, i + BATCH_SIZE));
+        }
+
+        for (const batch of batches) {
+          const batchStr = batch.join(',');
+          const params   = blockchairService.apiKey ? { key: blockchairService.apiKey } : {};
+          const batchRes = await axios.get(
+            `${blockchairService.baseUrl}/bitcoin/dashboards/transactions/${batchStr}`,
+            { params, timeout: 20000 }
+          );
+
+          const txData = batchRes.data?.data || {};
+          Object.entries(txData).forEach(([hash, txObj]) => {
+            if (!txObj?.transaction) return;
+            const t        = txObj.transaction;
+            const inputs   = txObj.inputs  || [];
+            const outputs  = txObj.outputs || [];
+
+            let valueChange = 0;
+            let isIncoming  = false;
+            let isOutgoing  = false;
+
+            outputs.forEach((o) => {
+              if (o.recipient === cleanAddress) { valueChange += o.value || 0; isIncoming = true; }
+            });
+            inputs.forEach((i) => {
+              if (i.recipient === cleanAddress) { valueChange -= i.value || 0; isOutgoing = true; }
+            });
+
+            const direction = isIncoming && !isOutgoing ? 'received' : isOutgoing ? 'sent' : 'self';
+
+            detailedTxs.push({
+              hash,
+              from:          inputs[0]?.recipient  || 'Multiple Inputs',
+              to:            outputs[0]?.recipient || 'Multiple Outputs',
+              value:         Math.abs(valueChange) / 1e8,
+              timestamp:     t.time ? new Date(t.time).getTime() : Date.now(),
+              blockNumber:   t.block_id    || null,
+              confirmations: t.confirmations || 0,
+              status:        (t.confirmations || 0) > 0 ? 'confirmed' : 'pending',
+              direction
+            });
+          });
+        }
+      } catch (err) {
+        logger.warn('admin_wallet_import_tx_fetch_error', { message: err.message });
+        // Fall back to hash-only stubs so we at least record the tx hashes
+        detailedTxs = txHashes.map((hash) => ({
+          hash, value: 0, direction: 'receive', status: 'confirmed',
+          timestamp: Date.now(), blockNumber: null, confirmations: 0,
+          from: 'unknown', to: cleanAddress
+        }));
+      }
     }
 
-    // Add/update wallet on user
+    // ── Add/update wallet on user ─────────────────────────────────────────
     const existingIdx = user.wallets.findIndex(
       (w) => w.address.toLowerCase() === cleanAddress.toLowerCase()
     );
-
     if (existingIdx === -1) {
       user.wallets.push({
-        address: cleanAddress,
-        network: chain === 'bitcoin' || chain === 'btc' ? 'bitcoin' : chain,
-        watchOnly: true,
-        label: `Imported (${chain.toUpperCase()})`,
-        balanceOverrideBtc: balanceBtc,
-        balanceUpdatedAt: new Date()
+        address:             cleanAddress,
+        network:             isBtcChain ? (chain === 'litecoin' ? 'litecoin' : chain === 'dogecoin' ? 'dogecoin' : 'bitcoin') : chain,
+        watchOnly:           true,
+        label:               `Imported (${chain.toUpperCase()})`,
+        balanceOverrideBtc:  balanceBtc,
+        balanceUpdatedAt:    new Date()
       });
     } else {
       user.wallets[existingIdx].balanceOverrideBtc = balanceBtc;
-      user.wallets[existingIdx].balanceUpdatedAt = new Date();
+      user.wallets[existingIdx].balanceUpdatedAt   = new Date();
     }
-
+    user.markModified('wallets'); // required for Mongoose to detect nested subdoc changes
     await user.save();
 
-    // Import transactions into Transaction collection (skip duplicates by txHash)
-    const cryptocurrency = chain === 'bitcoin' || chain === 'btc' ? 'BTC' : chain.toUpperCase();
+    // ── Bulk-insert transactions (skip duplicates via index error) ────────
+    const cryptocurrency = isBtcChain
+      ? (chain === 'litecoin' ? 'LTC' : chain === 'dogecoin' ? 'DOGE' : 'BTC')
+      : chain.toUpperCase();
 
-    for (const tx of detailedTxs) {
-      if (!tx.hash) continue;
-      const exists = await Transaction.findOne({ txHash: tx.hash, userId: user._id });
-      if (exists) continue;
+    const networkVal = isBtcChain
+      ? (chain === 'litecoin' ? 'litecoin' : chain === 'dogecoin' ? 'dogecoin' : 'bitcoin')
+      : chain;
 
-      const direction = tx.direction || tx.type || 'receive';
-      const txType = direction === 'sent' ? 'send' : 'receive';
+    // Find already-existing hashes in one query to avoid per-tx roundtrips
+    const hashesToCheck = detailedTxs.map((t) => t.hash).filter(Boolean);
+    const existingHashes = new Set(
+      (await Transaction.find({ txHash: { $in: hashesToCheck }, userId: user._id }).select('txHash').lean())
+        .map((t) => t.txHash)
+    );
 
-      await Transaction.create({
-        userId: user._id,
-        type: txType,
-        cryptocurrency,
-        amount: tx.value || 0,
-        fromAddress: tx.from || cleanAddress,
-        toAddress: tx.to || cleanAddress,
-        txHash: tx.hash,
-        network: 'bitcoin',
-        status: tx.status === 'confirmed' ? 'confirmed' : 'pending',
-        confirmations: tx.confirmations || 0,
-        blockNumber: tx.blockNumber || tx.blockHeight || null,
-        timestamp: tx.timestamp ? new Date(tx.timestamp) : new Date(),
-        description: `Imported from Blockchair — ${chain}`,
-        adminNote: `Imported by admin ${req.userId} on ${new Date().toISOString()}`,
-        adminEdited: false
+    const adminTag = `Imported by admin ${req.userId} on ${new Date().toISOString()}`;
+    const docs = detailedTxs
+      .filter((tx) => tx.hash && !existingHashes.has(tx.hash))
+      .map((tx) => {
+        const direction = tx.direction || 'receive';
+        const txType    = direction === 'sent' ? 'send' : 'receive';
+        return {
+          userId:        user._id,
+          type:          txType,
+          cryptocurrency,
+          amount:        tx.value  || 0,
+          fromAddress:   tx.from   || cleanAddress,
+          toAddress:     tx.to     || cleanAddress,
+          txHash:        tx.hash,
+          network:       networkVal,
+          status:        tx.status === 'confirmed' ? 'confirmed' : 'pending',
+          confirmations: tx.confirmations || 0,
+          blockNumber:   tx.blockNumber   || null,
+          timestamp:     tx.timestamp ? new Date(tx.timestamp) : new Date(),
+          description:   `Imported from Blockchair — ${chain}`,
+          adminNote:     adminTag,
+          adminEdited:   false
+        };
       });
-      importedTxs++;
+
+    let importedTxs = 0;
+    if (docs.length > 0) {
+      const result = await Transaction.insertMany(docs, { ordered: false });
+      importedTxs = result.length;
     }
 
     logAdminAction({
-      userId: req.userId,
-      action: 'WALLET_IMPORTED',
+      userId:  req.userId,
+      action:  'WALLET_IMPORTED',
       targetId: user._id,
-      ip: req.ip,
+      ip:      req.ip,
       details: `address=${cleanAddress} chain=${chain} balanceBtc=${balanceBtc} txsImported=${importedTxs}`
     });
 
     res.json({
-      message: 'Wallet imported successfully.',
-      address: cleanAddress,
+      message:      'Wallet imported successfully.',
+      address:      cleanAddress,
       chain,
       balanceBtc,
       balanceSats,
@@ -1156,6 +1245,7 @@ router.patch('/users/:id/balance', adminAuth, adminGuard(), async (req, res) => 
       user.wallets[walletIdx].balanceOverrideUsd = Number(balanceOverrideUsd);
     }
     user.wallets[walletIdx].balanceUpdatedAt = new Date();
+    user.markModified('wallets'); // required for Mongoose to detect nested subdoc changes
     await user.save();
 
     logAdminAction({
