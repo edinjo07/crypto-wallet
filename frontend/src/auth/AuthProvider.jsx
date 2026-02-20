@@ -21,7 +21,14 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    // Revoke the refreshToken cookie on the server before clearing local state
+    try {
+      await axios.post(`${API_URL}/auth/logout`, {}, { withCredentials: true });
+    } catch (_) {
+      // Non-fatal: clear local state regardless of server response
+    }
+
     setToken(null);
     setUser(null);
     setAccessToken(null);

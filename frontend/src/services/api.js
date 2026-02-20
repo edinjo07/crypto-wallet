@@ -4,6 +4,7 @@ import client from '../api/client';
 export const authAPI = {
   register: (data) => client.post('/auth/register', data),
   login: (data) => client.post('/auth/login', data),
+  logout: (revokeAll = false) => client.post('/auth/logout', { revokeAll }),
   // Fetches + sets the CSRF cookie. Must be called after login/refresh
   // so the refreshToken cookie is present for session binding.
   fetchCsrfToken: () => client.get('/auth/csrf-token')
@@ -54,7 +55,10 @@ export const transactionAPI = {
 // Prices API
 export const pricesAPI = {
   getLivePrices: () => client.get('/prices/live'),
-  getHistory: (coinId, days) => client.get(`/prices/history/${coinId}`, { params: { days } })
+  getHistory: (coinId, days) => client.get(`/prices/history/${coinId}`, { params: { days } }),
+  getMarketData: (chain) => client.get(`/prices/market/${chain}`),
+  getChainStats: (chain) => client.get(`/prices/stats/${chain}`),
+  getNetworkHealth: (chain) => client.get(`/prices/network-health/${chain}`)
 };
 
 // Token API
