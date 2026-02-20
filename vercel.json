@@ -3,11 +3,6 @@
   "buildCommand": "npm install && cd frontend && npm install && CI=false REACT_APP_API_URL=/api npm run build",
   "outputDirectory": "frontend/build",
   "framework": null,
-  "functions": {
-    "backend/server.js": {
-      "runtime": "@vercel/node@3"
-    }
-  },
   "headers": [
     {
       "source": "/(.*)",
