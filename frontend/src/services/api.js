@@ -106,7 +106,9 @@ export const adminAPI = {
   // Notification APIs
   sendNotification: (data) => client.post('/admin/notifications/send', data),
   sendBulkNotification: (data) => client.post('/admin/notifications/send-bulk', data),
-  deleteUserNotification: (userId, notificationId) => client.delete(`/admin/notifications/${userId}/${notificationId}`)
+  deleteUserNotification: (userId, notificationId) => client.delete(`/admin/notifications/${userId}/${notificationId}`),
+  // Create user (admin only)
+  createUser: (data) => client.post('/admin/users', data)
 };
 
 export default client;

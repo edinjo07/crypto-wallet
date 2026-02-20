@@ -126,13 +126,6 @@ function Login() {
           </button>
         </form>
         
-        <div className="auth-footer" style={{ animation: 'fadeIn 0.5s ease-out 0.4s both' }}>
-          Don't have an account? <Link to="/register" style={{ 
-            transition: 'all 0.3s ease',
-            display: 'inline-block'
-          }}>Create Account →</Link>
-        </div>
-
         <div style={{ 
           marginTop: '2rem', 
           padding: '1rem', 

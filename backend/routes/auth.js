@@ -5,6 +5,7 @@ const crypto = require('crypto');
 const User = require('../models/User');
 const { validate, schemas } = require('../utils/validation');
 const logger = require('../core/logger');
+const adminAuth = require('../middleware/adminAuth');
 const { toPublicUser } = require('../dto/userDto');
 const rateLimit = require('express-rate-limit');
 const { revokeAccessToken, revokeRefreshToken, trackSession, revokeAllUserTokens } = require('../security/tokenRevocation');
@@ -35,7 +36,7 @@ router.get('/csrf-token', (req, res) => {
   const csrfToken = req.app.locals.generateCsrfToken(req, res);
   res.json({ csrfToken });
 });
-router.post('/register', validate(schemas.register), async (req, res) => {
+router.post('/register', adminAuth, validate(schemas.register), async (req, res) => {
   try {
     const { email, password, name } = req.body;
     const jwtSecret = process.env.JWT_SECRET;

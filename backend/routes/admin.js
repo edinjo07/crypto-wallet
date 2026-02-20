@@ -193,6 +193,42 @@ router.delete('/users/:id', adminAuth, adminGuard(), async (req, res) => {
   }
 });
 
+// Create a new user (admin only)
+router.post('/users', adminAuth, adminGuard(), async (req, res) => {
+  try {
+    const { name, email, password, role } = req.body;
+
+    if (!name || !email || !password) {
+      return res.status(400).json({ message: 'Name, email and password are required.' });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({ message: 'Password must be at least 6 characters.' });
+    }
+
+    const existing = await User.findOne({ email });
+    if (existing) {
+      return res.status(400).json({ message: 'A user with that email already exists.' });
+    }
+
+    const user = new User({ name, email, password, role: role === 'admin' ? 'admin' : 'user' });
+    if (role === 'admin') user.isAdmin = true;
+    await user.save();
+
+    logAdminAction({
+      userId: req.userId,
+      action: 'create_user',
+      targetId: user._id,
+      ip: req.ip
+    });
+
+    res.status(201).json({ message: 'User created successfully.', userId: user._id });
+  } catch (error) {
+    logger.error('Error creating user', { message: error.message });
+    res.status(500).json({ message: 'Error creating user.' });
+  }
+});
+
 // Get all transactions with filters
 router.get('/transactions', adminAuth, adminGuard(), async (req, res) => {
   try {

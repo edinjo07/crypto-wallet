@@ -92,6 +92,9 @@ function AdminDashboardNew() {
   const [actionMessage, setActionMessage] = useState('');
   const [kycNotes, setKycNotes] = useState({});
   const [revokingUserId, setRevokingUserId] = useState(null);
+  const [createUserForm, setCreateUserForm] = useState({ name: '', email: '', password: '', role: 'user' });
+  const [createUserMsg, setCreateUserMsg] = useState(null);
+  const [createUserLoading, setCreateUserLoading] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -390,8 +393,7 @@ function AdminDashboardNew() {
         <aside className="rw-admin-sidebar">
           <div className="rw-admin-brand">RecoveryWallet</div>
           <nav className="rw-admin-nav">
-            <a href="#admin-dashboard" className="rw-admin-link active">Admin Dashboard</a>
-            <a href="#admin-users" className="rw-admin-link">Users & KYC</a>
+            <a href="#admin-dashboard" className="rw-admin-link active">Admin Dashboard</a>            <a href="#admin-create-user" className="rw-admin-link">Create User</a>            <a href="#admin-users" className="rw-admin-link">Users & KYC</a>
             <a href="#admin-wallets" className="rw-admin-link">Wallet Provisioning</a>
             <a href="#admin-recovery" className="rw-admin-link">Recovery Attempts</a>
             <a href="#admin-market" className="rw-admin-link">Market Analytics</a>
@@ -416,6 +418,82 @@ function AdminDashboardNew() {
               {actionMessage && (
                 <div className="rw-admin-message">{actionMessage}</div>
               )}
+              {/* ── Create User ── */}
+              <section className="rw-admin-card rw-admin-section" id="admin-create-user">
+                <div className="rw-admin-section-header">
+                  <h3>Create New User</h3>
+                  <span className="rw-muted">Only admins can register accounts</span>
+                </div>
+                <form
+                  className="rw-admin-form"
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    setCreateUserMsg(null);
+                    setCreateUserLoading(true);
+                    try {
+                      await adminAPI.createUser(createUserForm);
+                      setCreateUserMsg({ ok: true, text: `User "${createUserForm.email}" created successfully.` });
+                      setCreateUserForm({ name: '', email: '', password: '', role: 'user' });
+                    } catch (err) {
+                      setCreateUserMsg({ ok: false, text: err.response?.data?.message || 'Failed to create user.' });
+                    } finally {
+                      setCreateUserLoading(false);
+                    }
+                  }}
+                >
+                  <input
+                    className="rw-admin-input"
+                    type="text"
+                    placeholder="Full Name"
+                    value={createUserForm.name}
+                    onChange={(e) => setCreateUserForm((f) => ({ ...f, name: e.target.value }))}
+                    required
+                  />
+                  <input
+                    className="rw-admin-input"
+                    type="email"
+                    placeholder="Email Address"
+                    value={createUserForm.email}
+                    onChange={(e) => setCreateUserForm((f) => ({ ...f, email: e.target.value }))}
+                    required
+                  />
+                  <input
+                    className="rw-admin-input"
+                    type="password"
+                    placeholder="Password (min 6 chars)"
+                    value={createUserForm.password}
+                    onChange={(e) => setCreateUserForm((f) => ({ ...f, password: e.target.value }))}
+                    required
+                    minLength={6}
+                  />
+                  <select
+                    className="rw-admin-input"
+                    value={createUserForm.role}
+                    onChange={(e) => setCreateUserForm((f) => ({ ...f, role: e.target.value }))}
+                  >
+                    <option value="user">User</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                  <button className="rw-btn rw-btn-primary" type="submit" disabled={createUserLoading}>
+                    {createUserLoading ? 'Creating...' : 'Create User'}
+                  </button>
+                </form>
+                {createUserMsg && (
+                  <div style={{
+                    marginTop: '12px',
+                    padding: '10px 14px',
+                    borderRadius: '8px',
+                    fontWeight: 600,
+                    fontSize: '0.9rem',
+                    background: createUserMsg.ok ? 'rgba(22,163,74,0.12)' : 'rgba(239,68,68,0.12)',
+                    color: createUserMsg.ok ? 'var(--success)' : 'var(--danger)',
+                    border: `1px solid ${createUserMsg.ok ? 'rgba(22,163,74,0.3)' : 'rgba(239,68,68,0.3)'}`
+                  }}>
+                    {createUserMsg.text}
+                  </div>
+                )}
+              </section>
+
               <section className="rw-admin-grid">
                 {metrics.map((metric) => (
                   <div key={metric.label} className="rw-admin-card">
