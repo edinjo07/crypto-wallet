@@ -6,9 +6,12 @@ export default function useUsdPricesSocket() {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    const baseUrl = process.env.REACT_APP_API_URL
-      ? process.env.REACT_APP_API_URL.replace('/api', '')
-      : 'http://localhost:3000';
+    const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:3000/api';
+    // If it's a relative path (e.g. "/api"), use window.location.origin so
+    // socket.io connects to the same host. Otherwise strip "/api" from the full URL.
+    const baseUrl = apiUrl.startsWith('http')
+      ? apiUrl.replace('/api', '')
+      : (typeof window !== 'undefined' ? window.location.origin : '');
 
     // Get JWT token from localStorage
     const token = localStorage.getItem('token');
