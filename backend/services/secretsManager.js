@@ -25,7 +25,7 @@ class SecretsManager extends BaseService {
     return this.executeWithTracking('initialize', async () => {
       const requiredSecrets = [
         { name: 'JWT_SECRET', env: 'JWT_SECRET', required: true },
-        { name: 'MONGODB_URI', env: 'MONGODB_URI', required: true },
+        { name: 'MONGODB_URI', env: 'MONGODB_URI', required: false },
         { name: 'ENCRYPTION_MASTER_KEY', env: 'KMS_MASTER_KEY', required: false },
         { name: 'REDIS_URL', env: 'REDIS_URL', required: false }
       ];

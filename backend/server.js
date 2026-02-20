@@ -2,7 +2,6 @@
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
-const mongoose = require('mongoose');
 const cookieParser = require('cookie-parser');
 const { createLimiter } = require('./middleware/rateLimiter');
 const { antiReplay } = require('./middleware/antiReplay');
@@ -38,9 +37,6 @@ if (process.env.NODE_ENV !== 'production') {
     process.env.JWT_SECRET = crypto.randomBytes(32).toString('hex');
   }
 
-  if (!process.env.MONGODB_URI) {
-    process.env.MONGODB_URI = 'mongodb://127.0.0.1:27017/crypto-wallet';
-  }
 }
 
 const app = express();
@@ -197,43 +193,29 @@ app.use('/api/tokens', require('./routes/tokens'));
 const { adminAccessControl } = require('./middleware/adminAccessControl');
 app.use('/api/admin', adminLimiter, antiReplay({ requireHeaders: false }), ...adminAccessControl(), require('./routes/admin'));
 
-// Initialize KMS and Secrets Management
-let mongodbUri = null;
+// Initialize KMS, Secrets and Supabase
 let jwtSecret = null;
 
 (async () => {
   try {
-    // Initialize KMS
     await kmsService.initialize();
     logger.info('kms_initialized', { type: 'infrastructure' });
 
-    // Initialize Secrets Manager
     await secretsManager.initialize();
     logger.info('secrets_manager_initialized', { type: 'infrastructure' });
 
-    // Load configuration
     await configLoader.load(secretsManager);
     logger.info('configuration_loaded', { type: 'infrastructure' });
 
-    // Get secrets for connections
-    mongodbUri = configLoader.get('MONGODB_URI');
     jwtSecret = configLoader.get('JWT_SECRET');
-
-    if (!mongodbUri || !jwtSecret) {
-      throw new Error('Critical secrets not configured');
-    }
-
-    // MongoDB Connection — reuse existing connection on serverless warm invocations
-    if (mongoose.connection.readyState === 0) {
-      await mongoose.connect(mongodbUri);
-    }
-    logger.info('mongodb_connected', { type: 'infrastructure', status: 'success' });
+    if (!jwtSecret) throw new Error('JWT_SECRET not configured');
 
     // Supabase Storage — ensure kyc-documents bucket exists (idempotent)
     const { ensureKycBucket } = require('./services/supabaseClient');
     ensureKycBucket().catch((err) =>
       logger.warn('supabase_bucket_init_error', { message: err.message })
     );
+    logger.info('supabase_ready', { type: 'infrastructure', status: 'success' });
     metricsService.updateSystemMetrics(true);
   } catch (error) {
     logger.error('initialization_failed', {
@@ -242,17 +224,17 @@ let jwtSecret = null;
       errorType: 'startup_error'
     });
     metricsService.updateSystemMetrics(false);
-    // On Vercel serverless, don't kill the process — let individual requests fail with 503.
     if (!isVercel) process.exit(1);
   }
 })();
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
-  metricsService.updateSystemMetrics(mongoose.connection.readyState === 1);
-  res.json({ 
-    status: 'OK', 
+  metricsService.updateSystemMetrics(true);
+  res.json({
+    status: 'OK',
     message: 'Crypto Wallet API is running',
+    database: 'supabase',
     timestamp: new Date().toISOString(),
     uptime: Math.floor((Date.now() - metricsService.startTime) / 1000)
   });
@@ -260,14 +242,14 @@ app.get('/api/health', (req, res) => {
 
 // Prometheus metrics endpoint
 app.get('/api/metrics', (req, res) => {
-  metricsService.updateSystemMetrics(mongoose.connection.readyState === 1);
+  metricsService.updateSystemMetrics(true);
   res.set('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
   res.send(metricsService.getPrometheusMetrics());
 });
 
 // JSON metrics summary endpoint (for debugging/dashboards)
 app.get('/api/metrics/summary', (req, res) => {
-  metricsService.updateSystemMetrics(mongoose.connection.readyState === 1);
+  metricsService.updateSystemMetrics(true);
   res.json(metricsService.getMetricsSummary());
 });
 

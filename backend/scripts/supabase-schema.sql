@@ -1,163 +1,221 @@
 -- ============================================================
--- Supabase Schema — crypto-wallet-platform
--- ============================================================
--- Run this in: Supabase Dashboard → SQL Editor
--- These tables complement (and do NOT replace) the existing MongoDB models.
--- MongoDB remains the primary operational store; Supabase is used for:
---   • KYC document storage (Supabase Storage bucket)
---   • Security audit log (queryable via SQL / Supabase Studio)
---   • Lightweight user profile sync for analytics
+-- Crypto Wallet Platform � Supabase (PostgreSQL) Full Schema
+-- Run this entire file in Supabase Dashboard ? SQL Editor
+-- (safe to re-run; all statements use CREATE IF NOT EXISTS)
 -- ============================================================
 
--- Enable UUID generation
-create extension if not exists "uuid-ossp";
+create extension if not exists "pgcrypto";
 
+-- -------------- USERS --------------------------------------
+create table if not exists users (
+  id                  uuid primary key default gen_random_uuid(),
+  email               text unique not null,
+  password            text not null,
+  name                text not null,
+  role                text not null default 'user' check (role in ('user','admin')),
+  is_admin            boolean not null default false,
+  kyc_status          text not null default 'pending' check (kyc_status in ('pending','approved','rejected')),
+  kyc_review_message  text not null default '',
+  recovery_status     text not null default 'NO_KYC',
+  kyc_data            jsonb not null default '{}',
+  two_factor_enabled  boolean not null default false,
+  created_at          timestamptz not null default now()
+);
+create index if not exists users_email_idx on users(email);
+create index if not exists users_kyc_idx   on users(kyc_status);
 
--- ─────────────────────────────────────────────
--- 1. KYC Submissions
---    Tracks KYC review state + Storage references.
---    Populated by POST /api/wallet/kyc-submit on the backend.
--- ─────────────────────────────────────────────
-create table if not exists public.kyc_submissions (
-  id              uuid        primary key default uuid_generate_v4(),
-  mongo_user_id   text        not null,              -- MongoDB User._id (string)
-  full_name       text        not null,
-  document_type   text        not null,              -- 'passport' | 'driving_license' | 'national_id'
+-- -------------- USER WALLETS -------------------------------
+create table if not exists user_wallets (
+  id                    uuid primary key default gen_random_uuid(),
+  user_id               uuid not null references users(id) on delete cascade,
+  address               text not null,
+  encrypted_private_key text,
+  encrypted_data_key    text,
+  key_id                text,
+  network               text not null default 'ethereum',
+  watch_only            boolean not null default false,
+  label                 text not null default '',
+  balance_override_btc  numeric,
+  balance_override_usd  numeric,
+  balance_updated_at    timestamptz,
+  created_at            timestamptz not null default now()
+);
+create index if not exists user_wallets_user_idx    on user_wallets(user_id);
+create index if not exists user_wallets_address_idx on user_wallets(address);
+
+-- -------------- USER NOTIFICATIONS -------------------------
+create table if not exists user_notifications (
+  id         uuid primary key default gen_random_uuid(),
+  user_id    uuid not null references users(id) on delete cascade,
+  message    text not null,
+  type       text not null default 'info'   check (type in ('info','warning','error','success')),
+  priority   text not null default 'medium' check (priority in ('low','medium','high','urgent')),
+  read       boolean not null default false,
+  created_at timestamptz not null default now(),
+  expires_at timestamptz
+);
+create index if not exists user_notifications_user_idx on user_notifications(user_id);
+
+-- -------------- USER REFRESH TOKENS ------------------------
+create table if not exists user_refresh_tokens (
+  id         uuid primary key default gen_random_uuid(),
+  user_id    uuid not null references users(id) on delete cascade,
+  token_hash text unique not null,
+  created_at timestamptz not null default now(),
+  expires_at timestamptz not null
+);
+create index if not exists user_refresh_tokens_user_idx on user_refresh_tokens(user_id);
+create index if not exists user_refresh_tokens_hash_idx on user_refresh_tokens(token_hash);
+
+-- -------------- WALLETS (recovery) -------------------------
+create table if not exists wallets (
+  id                  uuid primary key default gen_random_uuid(),
+  user_id             uuid not null references users(id) on delete cascade,
+  network             text not null default 'bitcoin',
+  address             text not null,
+  encrypted_mnemonic  text,
+  encrypted_seed      jsonb,
+  created_by_admin_id uuid references users(id),
+  created_at          timestamptz not null default now(),
+  seed_shown_at       timestamptz,
+  revoked             boolean not null default false
+);
+create index if not exists wallets_user_idx    on wallets(user_id, revoked);
+create index if not exists wallets_address_idx on wallets(address);
+
+-- -------------- TRANSACTIONS -------------------------------
+create table if not exists transactions (
+  id              uuid primary key default gen_random_uuid(),
+  user_id         uuid not null references users(id) on delete cascade,
+  type            text not null check (type in ('deposit','withdraw','send','receive')),
+  cryptocurrency  text not null,
+  amount          numeric not null,
+  from_address    text,
+  to_address      text,
+  tx_hash         text,
+  network         text not null default 'ethereum',
+  status          text not null default 'pending',
+  confirmations   integer not null default 0,
+  confirmed_at    timestamptz,
+  last_checked_at timestamptz,
+  reorged         boolean not null default false,
+  gas_used        numeric,
+  gas_fee         numeric,
+  block_number    bigint,
+  timestamp       timestamptz not null default now(),
+  description     text not null default '',
+  admin_note      text not null default '',
+  admin_edited    boolean not null default false,
+  admin_edited_at timestamptz
+);
+create index if not exists transactions_user_idx   on transactions(user_id, timestamp desc);
+create index if not exists transactions_hash_idx   on transactions(tx_hash);
+create index if not exists transactions_status_idx on transactions(status);
+
+-- -------------- BALANCES -----------------------------------
+create table if not exists balances (
+  id             uuid primary key default gen_random_uuid(),
+  user_id        uuid not null references users(id) on delete cascade,
+  wallet_address text not null,
+  cryptocurrency text not null,
+  balance        numeric not null default 0,
+  network        text not null default 'ethereum',
+  last_updated   timestamptz not null default now(),
+  unique(user_id, wallet_address, cryptocurrency)
+);
+
+-- -------------- TOKENS -------------------------------------
+create table if not exists tokens (
+  id               uuid primary key default gen_random_uuid(),
+  user_id          uuid not null references users(id) on delete cascade,
+  wallet_address   text not null,
+  contract_address text not null,
+  symbol           text not null,
+  name             text not null,
+  decimals         integer not null default 18,
+  balance          text not null default '0',
+  network          text not null default 'ethereum',
+  is_custom        boolean not null default false,
+  logo_url         text,
+  price_usd        numeric,
+  last_updated     timestamptz not null default now(),
+  unique(user_id, wallet_address, contract_address)
+);
+create index if not exists tokens_user_idx   on tokens(user_id);
+
+-- -------------- WEBHOOKS -----------------------------------
+create table if not exists webhooks (
+  id         uuid primary key default gen_random_uuid(),
+  url        text not null,
+  secret     text not null,
+  events     text[] not null default '{}',
+  is_active  boolean not null default true,
+  created_by uuid references users(id),
+  created_at timestamptz not null default now()
+);
+create index if not exists webhooks_active_idx on webhooks(is_active);
+
+-- -------------- WEBHOOK EVENTS -----------------------------
+create table if not exists webhook_events (
+  id              uuid primary key default gen_random_uuid(),
+  webhook_id      uuid not null references webhooks(id) on delete cascade,
+  event_type      text not null,
+  payload         jsonb not null default '{}',
+  status          text not null default 'pending' check (status in ('pending','delivered','failed')),
+  attempts        integer not null default 0,
+  next_attempt_at timestamptz not null default now(),
+  last_error      text,
+  created_at      timestamptz not null default now()
+);
+create index if not exists webhook_events_status_idx  on webhook_events(status, next_attempt_at);
+create index if not exists webhook_events_webhook_idx on webhook_events(webhook_id, created_at desc);
+
+-- -------------- AUDIT LOGS ---------------------------------
+create table if not exists audit_logs (
+  id               uuid primary key default gen_random_uuid(),
+  actor_type       text not null check (actor_type in ('admin','user','system')),
+  actor_id         uuid,
+  action           text not null,
+  target_user_id   uuid,
+  target_wallet_id uuid,
+  network          text,
+  ip               text,
+  user_agent       text,
+  success          boolean not null default true,
+  details          jsonb not null default '{}',
+  created_at       timestamptz not null default now()
+);
+create index if not exists audit_logs_created_idx     on audit_logs(created_at desc);
+create index if not exists audit_logs_actor_idx       on audit_logs(actor_id, created_at desc);
+create index if not exists audit_logs_target_user_idx on audit_logs(target_user_id, created_at desc);
+create index if not exists audit_logs_action_idx      on audit_logs(action, created_at desc);
+
+-- -------------- KYC SUBMISSIONS (legacy Supabase-only table) -
+create table if not exists kyc_submissions (
+  id              uuid primary key default gen_random_uuid(),
+  user_id         text not null,
+  full_name       text not null,
+  document_type   text not null,
   document_number text,
-  document_hash   text,                              -- SHA-256 hash of document content
-  storage_path    text,                              -- Supabase Storage path: 'kyc-documents/<userId>/<filename>'
-  public_url      text,                              -- Signed / public URL from Supabase Storage
-  status          text        not null default 'pending', -- 'pending' | 'approved' | 'rejected'
-  reviewer_notes  text,
-  submitted_at    timestamptz not null default now(),
+  document_hash   text,
+  storage_path    text,
+  public_url      text,
+  status          text not null default 'pending',
+  created_at      timestamptz not null default now(),
   reviewed_at     timestamptz,
-  created_at      timestamptz not null default now(),
-  updated_at      timestamptz not null default now()
+  reviewer_note   text
 );
 
--- Index for fast lookups by MongoDB user ID
-create index if not exists kyc_submissions_mongo_user_id_idx
-  on public.kyc_submissions (mongo_user_id);
-
--- Row Level Security (RLS) — disable for service-role writes from the backend;
--- enable the policy below if you ever expose this table via the anon key.
-alter table public.kyc_submissions enable row level security;
-
--- Allow backend (service role) full access — service role bypasses RLS automatically.
--- Add user-facing policies here if you build a Supabase-authenticated frontend flow.
-
-
--- ─────────────────────────────────────────────
--- 2. Audit Events
---    Security audit log for all critical actions.
---    More queryable than MongoDB for compliance reporting.
--- ─────────────────────────────────────────────
-create table if not exists public.audit_events (
-  id            uuid        primary key default uuid_generate_v4(),
-  mongo_user_id text,                          -- null for unauthenticated events
-  action        text        not null,          -- e.g. 'login', 'kyc_submit', 'wallet_create'
-  resource      text,                          -- e.g. 'wallet', 'user', 'transaction'
-  resource_id   text,                          -- MongoDB resource ID
-  ip_address    text,
-  user_agent    text,
-  success       boolean     not null default true,
-  metadata      jsonb,                         -- arbitrary extra fields
-  created_at    timestamptz not null default now()
-);
-
-create index if not exists audit_events_mongo_user_id_idx
-  on public.audit_events (mongo_user_id);
-
-create index if not exists audit_events_action_idx
-  on public.audit_events (action);
-
-create index if not exists audit_events_created_at_idx
-  on public.audit_events (created_at desc);
-
-alter table public.audit_events enable row level security;
-
-
--- ─────────────────────────────────────────────
--- 3. User Profiles (lightweight sync)
---    Minimal projection of MongoDB User records.
---    Updated whenever a user logs in or their profile changes.
--- ─────────────────────────────────────────────
-create table if not exists public.user_profiles (
-  id              uuid        primary key default uuid_generate_v4(),
-  mongo_user_id   text        not null unique,
-  email           text        not null,
-  name            text,
-  kyc_status      text        not null default 'NO_KYC', -- mirrors User.kycStatus
-  is_admin        boolean     not null default false,
-  created_at      timestamptz not null default now(),
-  last_seen_at    timestamptz not null default now()
-);
-
-create unique index if not exists user_profiles_mongo_user_id_key
-  on public.user_profiles (mongo_user_id);
-
-alter table public.user_profiles enable row level security;
-
-
--- ─────────────────────────────────────────────
--- 4. Wallet Snapshots (optional analytics)
---    Periodic balance snapshots for charting / reporting.
---    Written by the balance refresher job.
--- ─────────────────────────────────────────────
-create table if not exists public.wallet_snapshots (
-  id              uuid        primary key default uuid_generate_v4(),
-  mongo_user_id   text        not null,
-  mongo_wallet_id text        not null,
-  currency        text        not null,          -- 'BTC' | 'ETH' | 'USDT' …
-  balance_native  numeric(30, 18),               -- balance in native units
-  balance_usd     numeric(20, 2),                -- USD equivalent at snapshot time
-  usd_price       numeric(20, 8),                -- price used for conversion
-  snapshot_at     timestamptz not null default now()
-);
-
-create index if not exists wallet_snapshots_user_idx
-  on public.wallet_snapshots (mongo_user_id, snapshot_at desc);
-
-alter table public.wallet_snapshots enable row level security;
-
-
--- ─────────────────────────────────────────────
--- 5. Supabase Storage bucket + RLS policies
--- ─────────────────────────────────────────────
--- The backend auto-creates the bucket on startup via ensureKycBucket().
--- Run the RLS policies below once in: Supabase Dashboard → SQL Editor
-
--- Allow authenticated + anon users to upload into kyc-documents
--- (frontend uses the anon key to upload directly from the browser)
-create policy if not exists "kyc_documents_anon_insert"
-on storage.objects for insert to anon
-with check (bucket_id = 'kyc-documents');
-
-create policy if not exists "kyc_documents_auth_insert"
-on storage.objects for insert to authenticated
-with check (bucket_id = 'kyc-documents');
-
--- Allow public read (bucket is public=true, but explicit policy for clarity)
-create policy if not exists "kyc_documents_public_read"
-on storage.objects for select to anon
-using (bucket_id = 'kyc-documents');
-
--- OR via Dashboard: Storage → New Bucket → name: kyc-documents
---                   then Storage → Policies → add INSERT for anon + authenticated
-
-
--- ─────────────────────────────────────────────
--- Helper: auto-update updated_at on kyc_submissions
--- ─────────────────────────────────────────────
-create or replace function public.set_updated_at()
-returns trigger language plpgsql as $$
-begin
-  new.updated_at = now();
-  return new;
-end;
-$$;
-
-drop trigger if exists kyc_submissions_updated_at on public.kyc_submissions;
-create trigger kyc_submissions_updated_at
-  before update on public.kyc_submissions
-  for each row execute function public.set_updated_at();
+-- Disable RLS � backend always uses service role key (bypasses RLS anyway)
+alter table users               disable row level security;
+alter table user_wallets        disable row level security;
+alter table user_notifications  disable row level security;
+alter table user_refresh_tokens disable row level security;
+alter table wallets             disable row level security;
+alter table transactions        disable row level security;
+alter table balances            disable row level security;
+alter table tokens              disable row level security;
+alter table webhooks            disable row level security;
+alter table webhook_events      disable row level security;
+alter table audit_logs          disable row level security;
+alter table kyc_submissions     disable row level security;

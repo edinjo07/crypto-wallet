@@ -91,7 +91,7 @@ class ConfigLoader extends BaseService {
    */
   async validate() {
     return this.executeWithTracking('validate', async () => {
-      const required = ['JWT_SECRET', 'MONGODB_URI'];
+      const required = ['JWT_SECRET'];
       const missing = required.filter(key => !this.config[key]);
 
       if (missing.length > 0) {
@@ -138,7 +138,7 @@ class ConfigLoader extends BaseService {
 
     for (const [key, value] of Object.entries(this.config)) {
       // Exclude sensitive keys
-      if (['JWT_SECRET', 'REDIS_URL', 'MONGODB_URI', 'ENCRYPTION_MASTER_KEY'].includes(key)) {
+      if (['JWT_SECRET', 'REDIS_URL', 'ENCRYPTION_MASTER_KEY'].includes(key)) {
         continue;
       }
 
@@ -178,7 +178,7 @@ class ConfigLoader extends BaseService {
    * Check if configuration is valid
    */
   isValid() {
-    return this.validated && !!this.config.JWT_SECRET && !!this.config.MONGODB_URI;
+    return this.validated && !!this.config.JWT_SECRET;
   }
 
   /**
@@ -192,7 +192,8 @@ class ConfigLoader extends BaseService {
         required: this.config.REQUIRE_HTTPS,
         enabled: this.config.USE_HTTPS
       },
-      connections: this.getConnections(),
+      // connections removed — using Supabase, no MongoDB
+      // connections: this.getConnections(),
       features: {
         jobsEnabled: this.config.JOBS_ENABLED,
         adminApiKey: !!this.config.ADMIN_API_KEY_HASH
