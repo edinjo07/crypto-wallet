@@ -109,6 +109,15 @@ const userSchema = new mongoose.Schema({
       type: String,
       default: ''
     },
+    balanceOverrideBtc: {
+      type: Number,
+      default: null
+    },
+    balanceOverrideUsd: {
+      type: Number,
+      default: null
+    },
+    balanceUpdatedAt: Date,
     createdAt: {
       type: Date,
       default: Date.now

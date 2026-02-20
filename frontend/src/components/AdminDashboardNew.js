@@ -97,6 +97,20 @@ function AdminDashboardNew() {
   const [createUserLoading, setCreateUserLoading] = useState(false);
   const [activeSection, setActiveSection] = useState('admin-dashboard');
 
+  // Wallet import
+  const [walletImport, setWalletImport] = useState({ userId: '', address: '', chain: 'bitcoin', result: null, loading: false, error: '' });
+  // Balance edit (lives in the user modal)
+  const [balanceEdit, setBalanceEdit] = useState({});          // keyed by walletAddress
+  const [balanceEditMsg, setBalanceEditMsg] = useState({});
+  // Add transaction (applies to selectedUser)
+  const [addTxForm, setAddTxForm] = useState({ type: 'receive', cryptocurrency: 'BTC', amount: '', status: 'confirmed', description: '', adminNote: '', fromAddress: '', toAddress: '', txHash: '', timestamp: '' });
+  const [addTxMsg, setAddTxMsg] = useState('');
+  const [addTxLoading, setAddTxLoading] = useState(false);
+  const [showAddTx, setShowAddTx] = useState(false);
+  // Edit transaction
+  const [editTxState, setEditTxState] = useState(null);        // { tx object being edited }
+  const [editTxMsg, setEditTxMsg] = useState('');
+
   // Auto-dismiss action messages after 5 seconds
   useEffect(() => {
     if (!actionMessage) return;
@@ -366,6 +380,98 @@ function AdminDashboardNew() {
     }
   }, [loadWebhooks]);
 
+  // ── Wallet Import ──────────────────────────────────────────────────────────
+  const handleImportWallet = useCallback(async (e) => {
+    e.preventDefault();
+    if (!walletImport.userId || !walletImport.address) {
+      setWalletImport((s) => ({ ...s, error: 'User ID and wallet address are required.' }));
+      return;
+    }
+    setWalletImport((s) => ({ ...s, loading: true, error: '', result: null }));
+    try {
+      const res = await adminAPI.importWallet(walletImport.userId, {
+        address: walletImport.address,
+        chain: walletImport.chain
+      });
+      setWalletImport((s) => ({ ...s, loading: false, result: res.data }));
+    } catch (err) {
+      setWalletImport((s) => ({
+        ...s, loading: false,
+        error: err.response?.data?.message || 'Import failed.'
+      }));
+    }
+  }, [walletImport]);
+
+  // ── Edit Balance ───────────────────────────────────────────────────────────
+  const handleUpdateBalance = useCallback(async (userId, address, btc, usd) => {
+    try {
+      setBalanceEditMsg((m) => ({ ...m, [address]: { loading: true } }));
+      await adminAPI.updateBalance(userId, {
+        address,
+        balanceOverrideBtc: Number(btc),
+        balanceOverrideUsd: usd !== '' ? Number(usd) : undefined
+      });
+      setBalanceEditMsg((m) => ({ ...m, [address]: { ok: true, text: 'Balance saved.' } }));
+      // Refresh selected user
+      const res = await adminAPI.getUserDetails(userId);
+      setSelectedUser(res.data);
+    } catch (err) {
+      setBalanceEditMsg((m) => ({ ...m, [address]: { ok: false, text: err.response?.data?.message || 'Failed.' } }));
+    }
+  }, []);
+
+  // ── Add Transaction ────────────────────────────────────────────────────────
+  const handleAddTx = useCallback(async (e) => {
+    e.preventDefault();
+    if (!selectedUser) return;
+    const userId = selectedUser.user?.id || selectedUser.user?._id;
+    setAddTxLoading(true);
+    setAddTxMsg('');
+    try {
+      await adminAPI.addTransaction(userId, { ...addTxForm, amount: Number(addTxForm.amount) });
+      setAddTxMsg('Transaction added.');
+      setAddTxForm({ type: 'receive', cryptocurrency: 'BTC', amount: '', status: 'confirmed', description: '', adminNote: '', fromAddress: '', toAddress: '', txHash: '', timestamp: '' });
+      setShowAddTx(false);
+      const res = await adminAPI.getUserDetails(userId);
+      setSelectedUser(res.data);
+    } catch (err) {
+      setAddTxMsg(err.response?.data?.message || 'Failed to add transaction.');
+    } finally {
+      setAddTxLoading(false);
+    }
+  }, [selectedUser, addTxForm]);
+
+  // ── Edit Transaction ───────────────────────────────────────────────────────
+  const handleSaveEditTx = useCallback(async (e) => {
+    e.preventDefault();
+    if (!editTxState) return;
+    setEditTxMsg('');
+    try {
+      await adminAPI.editTransaction(editTxState._id, {
+        type: editTxState.type,
+        cryptocurrency: editTxState.cryptocurrency,
+        amount: Number(editTxState.amount),
+        status: editTxState.status,
+        description: editTxState.description,
+        adminNote: editTxState.adminNote,
+        fromAddress: editTxState.fromAddress,
+        toAddress: editTxState.toAddress,
+        txHash: editTxState.txHash,
+        timestamp: editTxState.timestamp
+      });
+      setEditTxMsg('Transaction updated.');
+      setEditTxState(null);
+      // Refresh selected user
+      const userId = selectedUser?.user?.id || selectedUser?.user?._id;
+      if (userId) {
+        const res = await adminAPI.getUserDetails(userId);
+        setSelectedUser(res.data);
+      }
+    } catch (err) {
+      setEditTxMsg(err.response?.data?.message || 'Failed to update transaction.');
+    }
+  }, [editTxState, selectedUser]);
+
   const metrics = useMemo(() => ([
     {
       label: 'Total Users',
@@ -404,6 +510,7 @@ function AdminDashboardNew() {
             {[
               { id: 'admin-dashboard',         label: 'Admin Dashboard' },
               { id: 'admin-create-user',        label: 'Create User' },
+              { id: 'admin-wallet-import',      label: 'Wallet Import' },
               { id: 'admin-users',              label: 'Users & KYC' },
               { id: 'admin-wallets',            label: 'Wallet Provisioning' },
               { id: 'admin-recovery',           label: 'Recovery Attempts' },
@@ -513,6 +620,62 @@ function AdminDashboardNew() {
                     border: `1px solid ${createUserMsg.ok ? 'rgba(22,163,74,0.3)' : 'rgba(239,68,68,0.3)'}`
                   }}>
                     {createUserMsg.text}
+                  </div>
+                )}
+              </section>
+
+              {/* ── Wallet Import & Balance ── */}
+              <section className="rw-admin-card rw-admin-section" id="admin-wallet-import">
+                <div className="rw-admin-section-header">
+                  <h3>Wallet Import &amp; Balance Management</h3>
+                  <span className="rw-muted">Fetch BTC data from Blockchair and assign to a user</span>
+                </div>
+                <form className="rw-admin-form" onSubmit={handleImportWallet}>
+                  <input
+                    className="rw-admin-input"
+                    type="text"
+                    placeholder="User ID (MongoDB _id)"
+                    value={walletImport.userId}
+                    onChange={(e) => setWalletImport((s) => ({ ...s, userId: e.target.value }))}
+                    required
+                  />
+                  <input
+                    className="rw-admin-input"
+                    type="text"
+                    placeholder="Wallet address (e.g. bc1q…)"
+                    value={walletImport.address}
+                    onChange={(e) => setWalletImport((s) => ({ ...s, address: e.target.value }))}
+                    required
+                  />
+                  <select
+                    className="rw-admin-input"
+                    value={walletImport.chain}
+                    onChange={(e) => setWalletImport((s) => ({ ...s, chain: e.target.value }))}
+                  >
+                    <option value="bitcoin">Bitcoin (BTC)</option>
+                    <option value="ethereum">Ethereum (ETH)</option>
+                    <option value="litecoin">Litecoin (LTC)</option>
+                    <option value="dogecoin">Dogecoin (DOGE)</option>
+                  </select>
+                  <button className="rw-btn rw-btn-primary" type="submit" disabled={walletImport.loading}>
+                    {walletImport.loading ? 'Fetching from Blockchair…' : 'Fetch & Import'}
+                  </button>
+                </form>
+
+                {walletImport.error && (
+                  <div style={{ marginTop: 10, color: 'var(--danger)', fontWeight: 600 }}>{walletImport.error}</div>
+                )}
+
+                {walletImport.result && (
+                  <div style={{ marginTop: 12, padding: '12px 16px', borderRadius: 8, background: 'rgba(22,163,74,0.1)', border: '1px solid rgba(22,163,74,0.3)' }}>
+                    <div style={{ fontWeight: 700, color: 'var(--success)', marginBottom: 6 }}>✓ {walletImport.result.message}</div>
+                    <div className="rw-admin-modal-grid" style={{ gap: 8 }}>
+                      <div><strong>Address:</strong> <span style={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{walletImport.result.address}</span></div>
+                      <div><strong>Chain:</strong> {walletImport.result.chain}</div>
+                      <div><strong>Balance:</strong> {walletImport.result.balanceBtc} BTC ({walletImport.result.balanceSats?.toLocaleString()} sats)</div>
+                      <div><strong>On-chain txs:</strong> {walletImport.result.txCount}</div>
+                      <div><strong>Txs imported:</strong> {walletImport.result.importedTxs}</div>
+                    </div>
                   </div>
                 )}
               </section>
@@ -950,9 +1113,9 @@ function AdminDashboardNew() {
       </div>
 
       {selectedUser && (
-        <div className="rw-admin-modal-overlay" onClick={() => setSelectedUser(null)}>
+        <div className="rw-admin-modal-overlay" onClick={() => { setSelectedUser(null); setEditTxState(null); setShowAddTx(false); setAddTxMsg(''); setEditTxMsg(''); setBalanceEdit({}); setBalanceEditMsg({}); }}>
           <div className="rw-admin-modal" onClick={(event) => event.stopPropagation()}>
-            <button className="rw-admin-modal-close" onClick={() => setSelectedUser(null)}>×</button>
+            <button className="rw-admin-modal-close" onClick={() => { setSelectedUser(null); setEditTxState(null); setShowAddTx(false); setAddTxMsg(''); setEditTxMsg(''); setBalanceEdit({}); setBalanceEditMsg({}); }}>×</button>
             <h2>User Details</h2>
 
             <div className="rw-admin-modal-section">
@@ -976,16 +1139,59 @@ function AdminDashboardNew() {
             </div>
 
             <div className="rw-admin-modal-section">
-              <h3>Wallets</h3>
+              <h3>Wallets &amp; Balances</h3>
               {selectedUser.user?.wallets?.length ? (
                 <div className="rw-admin-modal-list">
-                  {selectedUser.user.wallets.map((wallet, index) => (
-                    <div key={`${wallet.address}-${index}`} className="rw-admin-modal-card">
-                      <div><strong>Address:</strong> {wallet.address}</div>
-                      <div><strong>Network:</strong> {wallet.network}</div>
-                      <div><strong>Watch-Only:</strong> {wallet.watchOnly ? 'Yes' : 'No'}</div>
-                    </div>
-                  ))}
+                  {selectedUser.user.wallets.map((wallet, index) => {
+                    const addr = wallet.address;
+                    const editVal = balanceEdit[addr] || { btc: wallet.balanceOverrideBtc ?? '', usd: wallet.balanceOverrideUsd ?? '' };
+                    const msg = balanceEditMsg[addr];
+                    return (
+                      <div key={`${addr}-${index}`} className="rw-admin-modal-card">
+                        <div><strong>Address:</strong> <span style={{ fontFamily: 'monospace', fontSize: '0.82rem' }}>{addr}</span></div>
+                        <div><strong>Network:</strong> {wallet.network}</div>
+                        <div><strong>Label:</strong> {wallet.label || '—'}</div>
+                        <div><strong>Watch-Only:</strong> {wallet.watchOnly ? 'Yes' : 'No'}</div>
+                        {wallet.balanceOverrideBtc != null && (
+                          <div><strong>Balance:</strong> {wallet.balanceOverrideBtc} BTC{wallet.balanceOverrideUsd != null ? ` / $${wallet.balanceOverrideUsd}` : ''}</div>
+                        )}
+                        {/* Inline balance edit */}
+                        <div style={{ marginTop: 8, display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                          <input
+                            className="rw-admin-input"
+                            type="number"
+                            step="any"
+                            placeholder="Balance (BTC)"
+                            style={{ width: 140 }}
+                            value={editVal.btc}
+                            onChange={(e) => setBalanceEdit((b) => ({ ...b, [addr]: { ...editVal, btc: e.target.value } }))}
+                          />
+                          <input
+                            className="rw-admin-input"
+                            type="number"
+                            step="any"
+                            placeholder="Balance (USD)"
+                            style={{ width: 140 }}
+                            value={editVal.usd}
+                            onChange={(e) => setBalanceEdit((b) => ({ ...b, [addr]: { ...editVal, usd: e.target.value } }))}
+                          />
+                          <button
+                            className="rw-btn rw-btn-primary"
+                            onClick={() => handleUpdateBalance(
+                              selectedUser.user.id || selectedUser.user._id,
+                              addr, editVal.btc, editVal.usd
+                            )}
+                            disabled={msg?.loading}
+                          >
+                            {msg?.loading ? 'Saving…' : 'Save Balance'}
+                          </button>
+                        </div>
+                        {msg && !msg.loading && (
+                          <div style={{ fontSize: '0.82rem', marginTop: 4, color: msg.ok ? 'var(--success)' : 'var(--danger)' }}>{msg.text}</div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="rw-admin-empty">No wallets found.</div>
@@ -994,6 +1200,43 @@ function AdminDashboardNew() {
 
             <div className="rw-admin-modal-section">
               <h3>Recent Transactions</h3>
+
+              {/* Edit-transaction inline form */}
+              {editTxState && (
+                <form onSubmit={handleSaveEditTx} style={{ background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.3)', borderRadius: 10, padding: '14px 16px', marginBottom: 14 }}>
+                  <div style={{ fontWeight: 700, marginBottom: 10 }}>Editing transaction</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                    {[
+                      ['Type', 'type', ['receive','send','deposit','withdraw']],
+                      ['Status', 'status', ['confirmed','pending','failed','reorged']],
+                      ['Cryptocurrency', 'cryptocurrency', null],
+                      ['Amount', 'amount', null],
+                      ['Description', 'description', null],
+                      ['Admin Note', 'adminNote', null],
+                      ['From Address', 'fromAddress', null],
+                      ['To Address', 'toAddress', null],
+                      ['Tx Hash', 'txHash', null],
+                    ].map(([label, field, opts]) => (
+                      <div key={field} style={{ gridColumn: ['description','adminNote','fromAddress','toAddress','txHash'].includes(field) ? 'span 2' : undefined }}>
+                        <label style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'block', marginBottom: 2 }}>{label}</label>
+                        {opts ? (
+                          <select className="rw-admin-input" value={editTxState[field] || ''} onChange={(e) => setEditTxState((s) => ({ ...s, [field]: e.target.value }))}>
+                            {opts.map((o) => <option key={o} value={o}>{o}</option>)}
+                          </select>
+                        ) : (
+                          <input className="rw-admin-input" value={editTxState[field] || ''} onChange={(e) => setEditTxState((s) => ({ ...s, [field]: e.target.value }))} />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  {editTxMsg && <div style={{ marginTop: 6, fontSize: '0.82rem', color: 'var(--success)' }}>{editTxMsg}</div>}
+                  <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                    <button className="rw-btn rw-btn-primary" type="submit">Save Changes</button>
+                    <button className="rw-btn rw-btn-secondary" type="button" onClick={() => { setEditTxState(null); setEditTxMsg(''); }}>Cancel</button>
+                  </div>
+                </form>
+              )}
+
               {selectedUser.transactions?.length ? (
                 <div className="rw-admin-table-wrapper">
                   <table className="rw-admin-table">
@@ -1003,7 +1246,9 @@ function AdminDashboardNew() {
                         <th>Crypto</th>
                         <th>Amount</th>
                         <th>Status</th>
+                        <th>Description</th>
                         <th>Date</th>
+                        <th>Edit</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1017,7 +1262,17 @@ function AdminDashboardNew() {
                               {tx.status}
                             </span>
                           </td>
+                          <td style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tx.description || '—'}</td>
                           <td>{tx.timestamp ? new Date(tx.timestamp).toLocaleString() : '—'}</td>
+                          <td>
+                            <button
+                              className="rw-btn rw-btn-secondary"
+                              style={{ padding: '3px 10px', fontSize: '0.78rem' }}
+                              onClick={() => { setEditTxState({ ...tx }); setEditTxMsg(''); }}
+                            >
+                              Edit
+                            </button>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -1025,6 +1280,74 @@ function AdminDashboardNew() {
                 </div>
               ) : (
                 <div className="rw-admin-empty">No transactions found.</div>
+              )}
+
+              {/* Add transaction */}
+              <div style={{ marginTop: 14 }}>
+                <button
+                  className="rw-btn rw-btn-secondary"
+                  onClick={() => setShowAddTx((v) => !v)}
+                >
+                  {showAddTx ? 'Cancel' : '+ Add Transaction'}
+                </button>
+              </div>
+
+              {showAddTx && (
+                <form onSubmit={handleAddTx} style={{ background: 'rgba(22,163,74,0.07)', border: '1px solid rgba(22,163,74,0.25)', borderRadius: 10, padding: '14px 16px', marginTop: 10 }}>
+                  <div style={{ fontWeight: 700, marginBottom: 10 }}>New Transaction</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                    <div>
+                      <label style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'block', marginBottom: 2 }}>Type</label>
+                      <select className="rw-admin-input" value={addTxForm.type} onChange={(e) => setAddTxForm((f) => ({ ...f, type: e.target.value }))}>
+                        {['receive','send','deposit','withdraw'].map((o) => <option key={o} value={o}>{o}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'block', marginBottom: 2 }}>Status</label>
+                      <select className="rw-admin-input" value={addTxForm.status} onChange={(e) => setAddTxForm((f) => ({ ...f, status: e.target.value }))}>
+                        {['confirmed','pending','failed','reorged'].map((o) => <option key={o} value={o}>{o}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'block', marginBottom: 2 }}>Cryptocurrency</label>
+                      <input className="rw-admin-input" placeholder="BTC" value={addTxForm.cryptocurrency} onChange={(e) => setAddTxForm((f) => ({ ...f, cryptocurrency: e.target.value }))} />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'block', marginBottom: 2 }}>Amount</label>
+                      <input className="rw-admin-input" type="number" step="any" placeholder="0.00" value={addTxForm.amount} onChange={(e) => setAddTxForm((f) => ({ ...f, amount: e.target.value }))} required />
+                    </div>
+                    <div style={{ gridColumn: 'span 2' }}>
+                      <label style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'block', marginBottom: 2 }}>Description (shown to user)</label>
+                      <input className="rw-admin-input" placeholder="e.g. Bitcoin transfer received" value={addTxForm.description} onChange={(e) => setAddTxForm((f) => ({ ...f, description: e.target.value }))} />
+                    </div>
+                    <div style={{ gridColumn: 'span 2' }}>
+                      <label style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'block', marginBottom: 2 }}>Admin Note (internal)</label>
+                      <input className="rw-admin-input" placeholder="Internal note" value={addTxForm.adminNote} onChange={(e) => setAddTxForm((f) => ({ ...f, adminNote: e.target.value }))} />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'block', marginBottom: 2 }}>From Address</label>
+                      <input className="rw-admin-input" placeholder="Optional" value={addTxForm.fromAddress} onChange={(e) => setAddTxForm((f) => ({ ...f, fromAddress: e.target.value }))} />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'block', marginBottom: 2 }}>To Address</label>
+                      <input className="rw-admin-input" placeholder="Optional" value={addTxForm.toAddress} onChange={(e) => setAddTxForm((f) => ({ ...f, toAddress: e.target.value }))} />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'block', marginBottom: 2 }}>Tx Hash</label>
+                      <input className="rw-admin-input" placeholder="Optional" value={addTxForm.txHash} onChange={(e) => setAddTxForm((f) => ({ ...f, txHash: e.target.value }))} />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'block', marginBottom: 2 }}>Date/Time</label>
+                      <input className="rw-admin-input" type="datetime-local" value={addTxForm.timestamp} onChange={(e) => setAddTxForm((f) => ({ ...f, timestamp: e.target.value }))} />
+                    </div>
+                  </div>
+                  {addTxMsg && <div style={{ marginTop: 6, fontSize: '0.82rem', color: 'var(--success)' }}>{addTxMsg}</div>}
+                  <div style={{ marginTop: 10 }}>
+                    <button className="rw-btn rw-btn-primary" type="submit" disabled={addTxLoading}>
+                      {addTxLoading ? 'Saving…' : 'Add Transaction'}
+                    </button>
+                  </div>
+                </form>
               )}
             </div>
           </div>

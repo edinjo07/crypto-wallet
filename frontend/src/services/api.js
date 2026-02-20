@@ -108,7 +108,19 @@ export const adminAPI = {
   sendBulkNotification: (data) => client.post('/admin/notifications/send-bulk', data),
   deleteUserNotification: (userId, notificationId) => client.delete(`/admin/notifications/${userId}/${notificationId}`),
   // Create user (admin only)
-  createUser: (data) => client.post('/admin/users', data)
+  createUser: (data) => client.post('/admin/users', data),
+
+  // Wallet import — fetch BTC balance + history from Blockchair, attach to user
+  importWallet: (userId, data) => client.post(`/admin/users/${userId}/wallet-import`, data),
+
+  // Edit user wallet display balance
+  updateBalance: (userId, data) => client.patch(`/admin/users/${userId}/balance`, data),
+
+  // Add a manual transaction to a user
+  addTransaction: (userId, data) => client.post(`/admin/users/${userId}/transactions`, data),
+
+  // Edit an existing transaction
+  editTransaction: (txId, data) => client.patch(`/admin/transactions/${txId}`, data)
 };
 
 export default client;

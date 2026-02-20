@@ -1006,4 +1006,284 @@ router.delete('/notifications/:userId/:notificationId', adminAuth, adminGuard(),
   }
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// WALLET IMPORT — fetch BTC balance + transactions from Blockchair and assign
+// them to a user account.
+// POST /admin/users/:id/wallet-import
+// Body: { address: string, chain?: string ('bitcoin'|'ethereum'|…) }
+// ─────────────────────────────────────────────────────────────────────────────
+router.post('/users/:id/wallet-import', adminAuth, adminGuard(), async (req, res) => {
+  try {
+    const { address, chain = 'bitcoin' } = req.body;
+
+    if (!address || typeof address !== 'string' || !address.trim()) {
+      return res.status(400).json({ message: 'Wallet address is required.' });
+    }
+
+    const cleanAddress = address.trim();
+
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ message: 'User not found.' });
+
+    const blockchairService = require('../services/blockchairService');
+
+    // Fetch balance and detailed transactions from Blockchair
+    let balanceSats = 0;
+    let balanceBtc = 0;
+    let txCount = 0;
+    let importedTxs = 0;
+
+    // Always attempt detailed fetch
+    let detailedTxs = [];
+    try {
+      detailedTxs = await blockchairService.getBitcoinTransactionsDetailed(cleanAddress, 50);
+    } catch (_) {
+      detailedTxs = [];
+    }
+
+    // Fetch balance separately
+    try {
+      const balData = await blockchairService.getBitcoinBalance(cleanAddress);
+      balanceSats = balData.totalSats || 0;
+      balanceBtc  = balData.totalBtc  || 0;
+      txCount     = balData.transactionCount || 0;
+    } catch (_) {
+      // balance fetch failed — continue with 0
+    }
+
+    // Add/update wallet on user
+    const existingIdx = user.wallets.findIndex(
+      (w) => w.address.toLowerCase() === cleanAddress.toLowerCase()
+    );
+
+    if (existingIdx === -1) {
+      user.wallets.push({
+        address: cleanAddress,
+        network: chain === 'bitcoin' || chain === 'btc' ? 'bitcoin' : chain,
+        watchOnly: true,
+        label: `Imported (${chain.toUpperCase()})`,
+        balanceOverrideBtc: balanceBtc,
+        balanceUpdatedAt: new Date()
+      });
+    } else {
+      user.wallets[existingIdx].balanceOverrideBtc = balanceBtc;
+      user.wallets[existingIdx].balanceUpdatedAt = new Date();
+    }
+
+    await user.save();
+
+    // Import transactions into Transaction collection (skip duplicates by txHash)
+    const cryptocurrency = chain === 'bitcoin' || chain === 'btc' ? 'BTC' : chain.toUpperCase();
+
+    for (const tx of detailedTxs) {
+      if (!tx.hash) continue;
+      const exists = await Transaction.findOne({ txHash: tx.hash, userId: user._id });
+      if (exists) continue;
+
+      const direction = tx.direction || tx.type || 'receive';
+      const txType = direction === 'sent' ? 'send' : 'receive';
+
+      await Transaction.create({
+        userId: user._id,
+        type: txType,
+        cryptocurrency,
+        amount: tx.value || 0,
+        fromAddress: tx.from || cleanAddress,
+        toAddress: tx.to || cleanAddress,
+        txHash: tx.hash,
+        network: 'bitcoin',
+        status: tx.status === 'confirmed' ? 'confirmed' : 'pending',
+        confirmations: tx.confirmations || 0,
+        blockNumber: tx.blockNumber || tx.blockHeight || null,
+        timestamp: tx.timestamp ? new Date(tx.timestamp) : new Date(),
+        description: `Imported from Blockchair — ${chain}`,
+        adminNote: `Imported by admin ${req.userId} on ${new Date().toISOString()}`,
+        adminEdited: false
+      });
+      importedTxs++;
+    }
+
+    logAdminAction({
+      userId: req.userId,
+      action: 'WALLET_IMPORTED',
+      targetId: user._id,
+      ip: req.ip,
+      details: `address=${cleanAddress} chain=${chain} balanceBtc=${balanceBtc} txsImported=${importedTxs}`
+    });
+
+    res.json({
+      message: 'Wallet imported successfully.',
+      address: cleanAddress,
+      chain,
+      balanceBtc,
+      balanceSats,
+      txCount,
+      importedTxs
+    });
+  } catch (error) {
+    logger.error('admin_wallet_import_error', { message: error.message });
+    res.status(500).json({ message: 'Failed to import wallet.', error: error.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EDIT USER BALANCE — override the displayed balance for a wallet address.
+// PATCH /admin/users/:id/balance
+// Body: { address: string, balanceOverrideBtc: number, balanceOverrideUsd?: number }
+// ─────────────────────────────────────────────────────────────────────────────
+router.patch('/users/:id/balance', adminAuth, adminGuard(), async (req, res) => {
+  try {
+    const { address, balanceOverrideBtc, balanceOverrideUsd } = req.body;
+
+    if (!address) return res.status(400).json({ message: 'Wallet address is required.' });
+    if (balanceOverrideBtc === undefined || balanceOverrideBtc === null) {
+      return res.status(400).json({ message: 'balanceOverrideBtc is required.' });
+    }
+
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ message: 'User not found.' });
+
+    const walletIdx = user.wallets.findIndex(
+      (w) => w.address.toLowerCase() === address.trim().toLowerCase()
+    );
+
+    if (walletIdx === -1) {
+      return res.status(404).json({ message: 'Wallet address not found on this user.' });
+    }
+
+    user.wallets[walletIdx].balanceOverrideBtc = Number(balanceOverrideBtc);
+    if (balanceOverrideUsd !== undefined) {
+      user.wallets[walletIdx].balanceOverrideUsd = Number(balanceOverrideUsd);
+    }
+    user.wallets[walletIdx].balanceUpdatedAt = new Date();
+    await user.save();
+
+    logAdminAction({
+      userId: req.userId,
+      action: 'BALANCE_OVERRIDE',
+      targetId: user._id,
+      ip: req.ip,
+      details: `address=${address} balance=${balanceOverrideBtc} BTC`
+    });
+
+    res.json({
+      message: 'Balance updated.',
+      address,
+      balanceOverrideBtc: user.wallets[walletIdx].balanceOverrideBtc,
+      balanceOverrideUsd: user.wallets[walletIdx].balanceOverrideUsd
+    });
+  } catch (error) {
+    logger.error('admin_balance_override_error', { message: error.message });
+    res.status(500).json({ message: 'Failed to update balance.' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ADD MANUAL TRANSACTION for a user (admin)
+// POST /admin/users/:id/transactions
+// Body: { type, cryptocurrency, amount, status, description, adminNote,
+//         fromAddress?, toAddress?, txHash?, timestamp? }
+// ─────────────────────────────────────────────────────────────────────────────
+router.post('/users/:id/transactions', adminAuth, adminGuard(), async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ message: 'User not found.' });
+
+    const {
+      type = 'receive',
+      cryptocurrency = 'BTC',
+      amount,
+      status = 'confirmed',
+      description = '',
+      adminNote = '',
+      fromAddress = '',
+      toAddress = '',
+      txHash = '',
+      timestamp
+    } = req.body;
+
+    if (amount === undefined || amount === null) {
+      return res.status(400).json({ message: 'amount is required.' });
+    }
+
+    const tx = await Transaction.create({
+      userId: user._id,
+      type,
+      cryptocurrency: cryptocurrency.toUpperCase(),
+      amount: Number(amount),
+      status,
+      description,
+      adminNote: adminNote || `Added by admin ${req.userId}`,
+      adminEdited: true,
+      adminEditedAt: new Date(),
+      fromAddress,
+      toAddress,
+      txHash: txHash || undefined,
+      network: cryptocurrency.toLowerCase() === 'btc' ? 'bitcoin' : 'ethereum',
+      timestamp: timestamp ? new Date(timestamp) : new Date()
+    });
+
+    logAdminAction({
+      userId: req.userId,
+      action: 'TRANSACTION_ADDED',
+      targetId: user._id,
+      ip: req.ip,
+      details: `txId=${tx._id} amount=${amount} ${cryptocurrency} type=${type}`
+    });
+
+    res.status(201).json({ message: 'Transaction added.', transaction: tx });
+  } catch (error) {
+    logger.error('admin_add_transaction_error', { message: error.message });
+    res.status(500).json({ message: 'Failed to add transaction.' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EDIT EXISTING TRANSACTION (admin)
+// PATCH /admin/transactions/:txId
+// Body: any subset of { type, cryptocurrency, amount, status, description,
+//                       adminNote, fromAddress, toAddress, txHash, timestamp }
+// ─────────────────────────────────────────────────────────────────────────────
+router.patch('/transactions/:txId', adminAuth, adminGuard(), async (req, res) => {
+  try {
+    const tx = await Transaction.findById(req.params.txId);
+    if (!tx) return res.status(404).json({ message: 'Transaction not found.' });
+
+    const allowed = [
+      'type', 'cryptocurrency', 'amount', 'status', 'description',
+      'adminNote', 'fromAddress', 'toAddress', 'txHash', 'timestamp',
+      'blockNumber', 'confirmations'
+    ];
+
+    allowed.forEach((field) => {
+      if (req.body[field] !== undefined) {
+        tx[field] = field === 'amount' ? Number(req.body[field]) :
+                    field === 'timestamp' ? new Date(req.body[field]) :
+                    req.body[field];
+      }
+    });
+
+    tx.adminEdited = true;
+    tx.adminEditedAt = new Date();
+    if (!tx.adminNote && req.userId) {
+      tx.adminNote = `Edited by admin ${req.userId}`;
+    }
+
+    await tx.save();
+
+    logAdminAction({
+      userId: req.userId,
+      action: 'TRANSACTION_EDITED',
+      targetId: tx.userId,
+      ip: req.ip,
+      details: `txId=${tx._id}`
+    });
+
+    res.json({ message: 'Transaction updated.', transaction: tx });
+  } catch (error) {
+    logger.error('admin_edit_transaction_error', { message: error.message });
+    res.status(500).json({ message: 'Failed to update transaction.' });
+  }
+});
+
 module.exports = router;
