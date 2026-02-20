@@ -54,6 +54,14 @@ const userSchema = new mongoose.Schema({
     documentType: String,
     documentNumber: String,
     documentHash: String,
+    // Identity document images
+    idFrontUrl: String,
+    idBackUrl: String,
+    // Address verification
+    addressDocType: String,   // 'bank_statement' | 'utility_bill'
+    addressDocUrl: String,
+    // Optional additional documents
+    otherDocUrls: [String],
     submittedAt: Date
   },
   notifications: [{

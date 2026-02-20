@@ -84,7 +84,12 @@ router.post('/kyc-submit', auth, validate(schemas.kycSubmit), async (req, res) =
       fullName: req.body.fullName,
       documentType: req.body.documentType,
       documentNumber: req.body.documentNumber,
-      documentHash: req.body.documentHash,
+      documentHash: req.body.documentHash || '',
+      idFrontUrl: req.body.idFrontUrl || null,
+      idBackUrl: req.body.idBackUrl || null,
+      addressDocType: req.body.addressDocType || null,
+      addressDocUrl: req.body.addressDocUrl || null,
+      otherDocUrls: Array.isArray(req.body.otherDocUrls) ? req.body.otherDocUrls : [],
       submittedAt: new Date()
     };
     

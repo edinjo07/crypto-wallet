@@ -761,7 +761,20 @@ function AdminDashboardNew() {
                             <tr key={kycUser._id}>
                               <td>{kycUser.kycData?.fullName || kycUser.name}</td>
                               <td>{kycUser.email}</td>
-                              <td>{kycUser.kycData?.documentType || '—'}</td>
+                              <td>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: '0.82rem' }}>
+                                  <span><strong>ID:</strong> {kycUser.kycData?.documentType || '—'} #{kycUser.kycData?.documentNumber || '—'}</span>
+                                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                                    {kycUser.kycData?.idFrontUrl && <a href={kycUser.kycData.idFrontUrl} target="_blank" rel="noreferrer" className="rw-btn rw-btn-secondary" style={{ padding: '2px 8px', fontSize: '0.78rem' }}>ID Front</a>}
+                                    {kycUser.kycData?.idBackUrl && <a href={kycUser.kycData.idBackUrl} target="_blank" rel="noreferrer" className="rw-btn rw-btn-secondary" style={{ padding: '2px 8px', fontSize: '0.78rem' }}>ID Back</a>}
+                                    {kycUser.kycData?.addressDocUrl && <a href={kycUser.kycData.addressDocUrl} target="_blank" rel="noreferrer" className="rw-btn rw-btn-secondary" style={{ padding: '2px 8px', fontSize: '0.78rem' }}>{kycUser.kycData.addressDocType === 'utility_bill' ? 'Utility Bill' : 'Bank Statement'}</a>}
+                                    {(kycUser.kycData?.otherDocUrls || []).map((url, i) => (
+                                      <a key={i} href={url} target="_blank" rel="noreferrer" className="rw-btn rw-btn-secondary" style={{ padding: '2px 8px', fontSize: '0.78rem' }}>Doc {i + 1}</a>
+                                    ))}
+                                  </div>
+                                  {!kycUser.kycData?.idFrontUrl && <span style={{ color: 'var(--text-muted)' }}>No files uploaded</span>}
+                                </div>
+                              </td>
                               <td>{kycUser.kycData?.submittedAt ? new Date(kycUser.kycData.submittedAt).toLocaleString() : '—'}</td>
                               <td>
                                 <div className="rw-admin-action-row">

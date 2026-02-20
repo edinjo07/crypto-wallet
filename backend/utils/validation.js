@@ -91,10 +91,19 @@ const kycSubmitSchema = z.object({
     .string()
     .min(3, 'Document number must be at least 3 characters')
     .max(50, 'Document number must not exceed 50 characters'),
-  documentHash: z
-    .string()
-    .min(32, 'Document hash must be at least 32 characters')
-    .max(128, 'Document hash must not exceed 128 characters'),
+  // Legacy hash — optional for backward compat
+  documentHash: z.string().max(128).optional(),
+  // Identity document URLs (uploaded to storage)
+  idFrontUrl: z.string().url().optional().or(z.literal('')),
+  idBackUrl: z.string().url().optional().or(z.literal('')),
+  // Address verification
+  addressDocType: z
+    .enum(['bank_statement', 'utility_bill'], {
+      errorMap: () => ({ message: 'Invalid address document type' })
+    }),
+  addressDocUrl: z.string().url().optional().or(z.literal('')),
+  // Optional additional documents
+  otherDocUrls: z.array(z.string().url()).optional()
 });
 
 // Transaction schema

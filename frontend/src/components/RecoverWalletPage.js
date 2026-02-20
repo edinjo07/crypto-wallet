@@ -1,12 +1,57 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { authAPI, pricesAPI, walletAPI } from '../services/api';
+import { useAuth } from '../auth/useAuth';
+import { supabase } from '../lib/supabaseClient';
 
 const initialForm = {
   fullName: '',
   documentType: 'passport',
   documentNumber: '',
-  documentFile: null
+  idFrontFile: null,
+  idBackFile: null,
+  addressDocType: 'bank_statement',
+  addressDocFile: null,
+  otherDocFiles: []
 };
+
+const KYC_BUCKET = 'kyc-documents';
+
+async function hashFile(file) {
+  const buffer = await file.arrayBuffer();
+  const digest = await crypto.subtle.digest('SHA-256', buffer);
+  return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function uploadFile(file, userId, fieldName) {
+  if (!supabase || !file) return null;
+  try {
+    const ext = file.name.split('.').pop();
+    const path = `${userId}/${fieldName}_${Date.now()}.${ext}`;
+    const { error } = await supabase.storage.from(KYC_BUCKET).upload(path, file, { contentType: file.type, upsert: true });
+    if (error) return null;
+    const { data } = supabase.storage.from(KYC_BUCKET).getPublicUrl(path);
+    return data?.publicUrl || null;
+  } catch {
+    return null;
+  }
+}
+
+function FileUploadField({ label, hint, file, onChange, accept, required }) {
+  return (
+    <div className="form-group">
+      <label className="form-label">
+        {label}{required && <span style={{ color: 'var(--danger)', marginLeft: 3 }}>*</span>}
+        {hint && <span style={{ fontWeight: 400, color: 'var(--text-muted)', marginLeft: 6, fontSize: '0.82rem' }}>{hint}</span>}
+      </label>
+      <label className={`kyc-upload-area${file ? ' has-file' : ''}`}>
+        <input type="file" accept={accept || 'image/*,.pdf'} style={{ display: 'none' }} onChange={(e) => onChange(e.target.files?.[0] || null)} />
+        {file
+          ? <span>✓ {file.name}</span>
+          : <span>Click to upload or drag &amp; drop</span>}
+      </label>
+    </div>
+  );
+}
 
 const statusCopy = {
   NO_KYC: {
@@ -43,13 +88,6 @@ const statusCopy = {
   }
 };
 
-async function hashFile(file) {
-  const buffer = await file.arrayBuffer();
-  const digest = await crypto.subtle.digest('SHA-256', buffer);
-  const hashArray = Array.from(new Uint8Array(digest));
-  return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
-}
-
 function toNumber(value) {
   if (typeof value === 'number') return Number.isFinite(value) ? value : null;
   if (typeof value === 'string') {
@@ -60,6 +98,7 @@ function toNumber(value) {
 }
 
 function RecoverWalletPage() {
+  const { user } = useAuth();
   const [form, setForm] = useState(initialForm);
   const [status, setStatus] = useState('NO_KYC');
   const [message, setMessage] = useState('');
@@ -70,10 +109,18 @@ function RecoverWalletPage() {
   const [submitMessage, setSubmitMessage] = useState('');
   const [revealLoading, setRevealLoading] = useState(false);
   const [seedPayload, setSeedPayload] = useState(null);
+  const [uploadProgress, setUploadProgress] = useState('');
 
   const statusText = statusCopy[status] || statusCopy.NO_KYC;
 
-  const canSubmitKyc = form.fullName && form.documentNumber && !loading;
+  const needsBack = form.documentType === 'national_id' || form.documentType === 'drivers_license';
+  const canSubmitKyc = !loading &&
+    form.fullName.trim() &&
+    form.documentNumber.trim() &&
+    form.idFrontFile &&
+    (!needsBack || form.idBackFile) &&
+    form.addressDocFile;
+
   const showKycForm = status === 'NO_KYC' || status === 'KYC_MORE_DOCS' || status === 'KYC_REJECTED';
   const showSubmitted = status === 'KYC_SUBMITTED';
   const showProcessing = status === 'KYC_PROCESSING';
@@ -156,19 +203,52 @@ function RecoverWalletPage() {
     event.preventDefault();
     setLoading(true);
     setSubmitMessage('');
+    setUploadProgress('Preparing documents...');
 
     try {
-      // Ensure the CSRF cookie is fresh before submitting (handles sessions
-      // that existed before the CSRF cookie was first issued)
       try { await authAPI.fetchCsrfToken(); } catch (_) { /* non-fatal */ }
 
-      const documentHash = form.documentFile ? await hashFile(form.documentFile) : '';
+      const userId = user?.id || user?._id || 'unknown';
+
+      // Upload identity document front
+      setUploadProgress('Uploading ID front...');
+      const idFrontUrl = await uploadFile(form.idFrontFile, userId, 'id_front');
+
+      // Upload identity document back (if required)
+      let idBackUrl = null;
+      if (needsBack && form.idBackFile) {
+        setUploadProgress('Uploading ID back...');
+        idBackUrl = await uploadFile(form.idBackFile, userId, 'id_back');
+      }
+
+      // Upload address document
+      setUploadProgress('Uploading address document...');
+      const addressDocUrl = await uploadFile(form.addressDocFile, userId, 'address_doc');
+
+      // Upload optional other documents
+      const otherDocUrls = [];
+      for (let i = 0; i < form.otherDocFiles.length; i++) {
+        setUploadProgress(`Uploading additional document ${i + 1}...`);
+        const url = await uploadFile(form.otherDocFiles[i], userId, `other_doc_${i}`);
+        if (url) otherDocUrls.push(url);
+      }
+
+      // Hash the front doc as legacy hash field
+      const documentHash = form.idFrontFile ? await hashFile(form.idFrontFile) : '';
+
+      setUploadProgress('Submitting...');
       await walletAPI.submitKyc({
         fullName: form.fullName,
         documentType: form.documentType,
         documentNumber: form.documentNumber,
-        documentHash
+        documentHash,
+        idFrontUrl: idFrontUrl || '',
+        idBackUrl: idBackUrl || '',
+        addressDocType: form.addressDocType,
+        addressDocUrl: addressDocUrl || '',
+        otherDocUrls
       });
+
       setSubmitMessage('KYC submitted. Your documents are under review.');
       setForm(initialForm);
       await loadStatus();
@@ -176,6 +256,7 @@ function RecoverWalletPage() {
       setSubmitMessage(error?.response?.data?.message || 'Unable to submit KYC.');
     } finally {
       setLoading(false);
+      setUploadProgress('');
     }
   };
 
@@ -209,48 +290,115 @@ function RecoverWalletPage() {
             <p><strong>{statusText.title}</strong></p>
             <p>{statusText.body}</p>
             <form onSubmit={onSubmitKyc} className="rw-recover-form">
+
+              {/* ── Section 1: Identity Document ── */}
+              <div style={{ margin: '1.5rem 0 0.5rem', fontWeight: 700, fontSize: '1rem', color: 'var(--primary)' }}>
+                1. Identity Document
+              </div>
               <div className="form-group">
-                <label className="form-label">Full name</label>
+                <label className="form-label">Full name <span style={{ color: 'var(--danger)' }}>*</span></label>
                 <input
                   className="form-input"
                   type="text"
+                  placeholder="As it appears on your document"
                   value={form.fullName}
-                  onChange={(event) => setForm((prev) => ({ ...prev, fullName: event.target.value }))}
+                  onChange={(e) => setForm((p) => ({ ...p, fullName: e.target.value }))}
+                  required
                 />
               </div>
               <div className="form-group">
-                <label className="form-label">Document type</label>
+                <label className="form-label">Document type <span style={{ color: 'var(--danger)' }}>*</span></label>
                 <select
                   className="form-input form-select"
                   value={form.documentType}
-                  onChange={(event) => setForm((prev) => ({ ...prev, documentType: event.target.value }))}
+                  onChange={(e) => setForm((p) => ({ ...p, documentType: e.target.value, idBackFile: null }))}
                 >
                   <option value="passport">Passport</option>
-                  <option value="id">National ID</option>
-                  <option value="driver">Driver License</option>
+                  <option value="national_id">National ID</option>
+                  <option value="drivers_license">Driver&apos;s License</option>
                 </select>
               </div>
               <div className="form-group">
-                <label className="form-label">Document number</label>
+                <label className="form-label">Document number <span style={{ color: 'var(--danger)' }}>*</span></label>
                 <input
                   className="form-input"
                   type="text"
+                  placeholder="e.g. AB123456"
                   value={form.documentNumber}
-                  onChange={(event) => setForm((prev) => ({ ...prev, documentNumber: event.target.value }))}
+                  onChange={(e) => setForm((p) => ({ ...p, documentNumber: e.target.value }))}
+                  required
                 />
+              </div>
+              <FileUploadField
+                label="Front of document"
+                hint={form.documentType === 'passport' ? '(photo page)' : '(front side)'}
+                file={form.idFrontFile}
+                onChange={(f) => setForm((p) => ({ ...p, idFrontFile: f }))}
+                required
+              />
+              {needsBack && (
+                <FileUploadField
+                  label="Back of document"
+                  hint="(reverse side)"
+                  file={form.idBackFile}
+                  onChange={(f) => setForm((p) => ({ ...p, idBackFile: f }))}
+                  required
+                />
+              )}
+
+              {/* ── Section 2: Address Verification ── */}
+              <div style={{ margin: '1.5rem 0 0.5rem', fontWeight: 700, fontSize: '1rem', color: 'var(--primary)' }}>
+                2. Proof of Address
               </div>
               <div className="form-group">
-                <label className="form-label">Document upload</label>
-                <input
-                  className="form-input"
-                  type="file"
-                  onChange={(event) => setForm((prev) => ({ ...prev, documentFile: event.target.files?.[0] || null }))}
-                />
+                <label className="form-label">Document type <span style={{ color: 'var(--danger)' }}>*</span></label>
+                <select
+                  className="form-input form-select"
+                  value={form.addressDocType}
+                  onChange={(e) => setForm((p) => ({ ...p, addressDocType: e.target.value }))}
+                >
+                  <option value="bank_statement">Bank Statement</option>
+                  <option value="utility_bill">Utility Bill</option>
+                </select>
               </div>
-              <button className="rw-btn rw-btn-primary" type="submit" disabled={!canSubmitKyc}>
-                {loading ? 'Submitting...' : 'Start Identity Verification'}
+              <FileUploadField
+                label="Address document"
+                hint="must show name and address, issued within last 3 months"
+                file={form.addressDocFile}
+                onChange={(f) => setForm((p) => ({ ...p, addressDocFile: f }))}
+                required
+              />
+
+              {/* ── Section 3: Other Documents (optional) ── */}
+              <div style={{ margin: '1.5rem 0 0.5rem', fontWeight: 700, fontSize: '1rem', color: 'var(--primary)' }}>
+                3. Additional Documents <span style={{ fontWeight: 400, color: 'var(--text-muted)', fontSize: '0.85rem' }}>(optional)</span>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Upload any supporting documents</label>
+                <label className="kyc-upload-area">
+                  <input
+                    type="file"
+                    multiple
+                    accept="image/*,.pdf"
+                    style={{ display: 'none' }}
+                    onChange={(e) => setForm((p) => ({ ...p, otherDocFiles: Array.from(e.target.files || []) }))}
+                  />
+                  {form.otherDocFiles.length > 0
+                    ? <span>✓ {form.otherDocFiles.length} file{form.otherDocFiles.length > 1 ? 's' : ''} selected</span>
+                    : <span>Click to upload (multiple files allowed)</span>}
+                </label>
+              </div>
+
+              {uploadProgress && (
+                <div style={{ padding: '8px 12px', background: 'rgba(102,126,234,0.1)', borderRadius: 8, fontSize: '0.9rem', color: 'var(--primary)', fontWeight: 600 }}>
+                  {uploadProgress}
+                </div>
+              )}
+
+              <button className="rw-btn rw-btn-primary" type="submit" disabled={!canSubmitKyc} style={{ marginTop: '1rem' }}>
+                {loading ? 'Submitting...' : 'Submit for Verification'}
               </button>
-              {submitMessage && <div className="rw-admin-message">{submitMessage}</div>}
+              {submitMessage && <div className="rw-admin-message" style={{ marginTop: 12 }}>{submitMessage}</div>}
             </form>
           </div>
         )}

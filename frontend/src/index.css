@@ -1504,6 +1504,18 @@ code {
 .kyc-upload-area.has-file {
   border-color: var(--success);
   background: rgba(48, 209, 88, 0.05);
+  color: var(--success);
+  font-weight: 600;
+}
+
+.kyc-upload-area span {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+
+.kyc-upload-area.has-file span {
+  color: var(--success);
 }
 
 /* Progress bar for recovery */
