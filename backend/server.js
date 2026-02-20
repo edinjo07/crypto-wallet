@@ -24,6 +24,9 @@ const crypto = require('crypto');
 
 dotenv.config();
 
+// Vercel sets VERCEL=1 automatically. When true, skip local HTTPS/Socket.io/server.listen.
+const isVercel = !!process.env.VERCEL;
+
 if (process.env.NODE_ENV !== 'production') {
   if (!process.env.COOKIE_SECRET) {
     // Generate a random secret for development - not hardcoded
@@ -215,8 +218,10 @@ let jwtSecret = null;
       throw new Error('Critical secrets not configured');
     }
 
-    // MongoDB Connection
-    await mongoose.connect(mongodbUri);
+    // MongoDB Connection — reuse existing connection on serverless warm invocations
+    if (mongoose.connection.readyState === 0) {
+      await mongoose.connect(mongodbUri);
+    }
     logger.info('mongodb_connected', { type: 'infrastructure', status: 'success' });
     metricsService.updateSystemMetrics(true);
   } catch (error) {
@@ -226,7 +231,8 @@ let jwtSecret = null;
       errorType: 'startup_error'
     });
     metricsService.updateSystemMetrics(false);
-    process.exit(1);
+    // On Vercel serverless, don't kill the process — let individual requests fail with 503.
+    if (!isVercel) process.exit(1);
   }
 })();
 
@@ -283,8 +289,11 @@ function loadTlsCredentials(keyPath, certPath) {
   };
 }
 
+// On Vercel, TLS and listening are handled by the platform — skip local HTTPS server.
+
 let server;
 
+if (!isVercel) {
 // Always use HTTPS. Production deployments should set TLS_KEY_PATH / TLS_CERT_PATH.
 // Development falls back to the bundled self-signed certs in backend/certs/.
 // If you are behind a reverse proxy that terminates TLS, set TLS_KEY_PATH/TLS_CERT_PATH
@@ -309,7 +318,9 @@ try {
   // or set TLS_KEY_PATH / TLS_CERT_PATH for production.
   throw new Error(`TLS certificate load failed: ${error.message}`);
 }
+}
 
+if (!isVercel) {
 const io = new Server(server, {
   cors: {
     origin: process.env.SOCKET_CORS_ORIGIN || '*',
@@ -406,3 +417,7 @@ server.listen(PORT, HOST, () => {
   console.log(`Access from this computer: ${protocol}://localhost:${PORT}`);
   console.log(`Access from network: ${protocol}://<your-ip>:${PORT}`);
 });
+} // end !isVercel
+
+// Export app for Vercel serverless
+module.exports = app;
