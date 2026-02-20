@@ -47,6 +47,14 @@ function Navbar({ user, onLogout }) {
         <span className="brand-text">CryptoWallet</span>
       </div>
 
+      {/* Back to Dashboard — mobile only, shown on non-dashboard pages */}
+      {location.pathname !== '/dashboard' && (
+        <Link to="/dashboard" className="navbar-back-btn">
+          <Icon name="chevronLeft" size={18} />
+          <span>Dashboard</span>
+        </Link>
+      )}
+
       {/* Mobile Menu Button */}
       <button 
         className="mobile-menu-btn"
