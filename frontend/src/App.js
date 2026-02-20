@@ -7,6 +7,7 @@ import Register from './components/Register';
 import Navbar from './components/Navbar';
 import AdminDashboard from './components/AdminDashboardNew';
 import RecoverWalletPage from './components/RecoverWalletPage';
+import ChangePasswordPage from './components/ChangePasswordPage';
 import RequireAuth from './auth/RequireAuth';
 import RequireAdmin from './auth/RequireAdmin';
 import { useAuth } from './auth/useAuth';
@@ -38,6 +39,14 @@ function App() {
                 <Dashboard />
               </RequireAuth>
             } 
+          />
+          <Route
+            path="/change-password"
+            element={
+              <RequireAuth>
+                <ChangePasswordPage />
+              </RequireAuth>
+            }
           />
           <Route
             path="/recover-wallet"

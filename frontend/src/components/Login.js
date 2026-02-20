@@ -141,6 +141,19 @@ function Login() {
             transition: 'all 0.3s ease'
           }}>Access Admin Portal</Link>
         </div>
+
+        <div style={{
+          marginTop: '1rem',
+          padding: '0.75rem 1rem',
+          background: 'rgba(74, 158, 255, 0.07)',
+          borderRadius: '12px',
+          textAlign: 'center',
+          fontSize: '0.85rem',
+          color: '#888',
+          border: '1px solid rgba(74, 158, 255, 0.15)'
+        }}>
+          Forgot your password? Contact your administrator to have it reset.
+        </div>
       </div>
     </div>
   );

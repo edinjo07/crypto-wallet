@@ -693,8 +693,13 @@ function Dashboard() {
               <div className="rw-status">
                 <span className="rw-status-dot"></span>
                 Operational & secure
-              </div>
-            </div>
+              </div>              <button
+                className="rw-btn rw-btn-secondary"
+                style={{ marginTop: '0.75rem' }}
+                onClick={() => navigate('/change-password')}
+              >
+                Change Password
+              </button>            </div>
             <div className="rw-card" id="support">
               <h3>Support</h3>
               <p className="rw-muted">24/7 recovery assistance for critical cases.</p>

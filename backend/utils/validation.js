@@ -193,11 +193,17 @@ const validate = (schema) => {
   };
 };
 
+const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, 'Current password is required'),
+  newPassword: passwordSchema,
+});
+
 module.exports = {
   validate,
   schemas: {
     register: registerSchema,
     login: loginSchema,
+    changePassword: changePasswordSchema,
     createWallet: createWalletSchema,
     importWallet: importWalletSchema,
     watchOnlyWallet: watchOnlyWalletSchema,

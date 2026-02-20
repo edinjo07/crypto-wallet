@@ -1264,6 +1264,71 @@ router.post('/users/:id/wallet-import', adminAuth, adminGuard(), async (req, res
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// ADMIN RESET USER PASSWORD
+// PATCH /admin/users/:id/reset-password
+// Body: { newPassword: string }
+// ─────────────────────────────────────────────────────────────────────────────
+router.patch('/users/:id/reset-password', adminAuth, adminGuard(), async (req, res) => {
+  try {
+    const { newPassword } = req.body;
+    if (!newPassword || typeof newPassword !== 'string') {
+      return res.status(400).json({ message: 'newPassword is required' });
+    }
+    // Enforce same password requirements: min 8, upper, lower, number, special
+    const strongPw = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*]).{8,100}$/;
+    if (!strongPw.test(newPassword)) {
+      return res.status(400).json({
+        message: 'Password must be 8-100 characters and include uppercase, lowercase, number and special character (!@#$%^&*)'
+      });
+    }
+
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    // Prevent admin from accidentally changing another admin's password
+    if (user.isAdmin || user.role === 'admin') {
+      return res.status(403).json({ message: 'Cannot reset password for admin accounts' });
+    }
+
+    user.password = newPassword; // pre-save hook hashes it
+    user.refreshTokens = [];     // revoke all existing sessions
+
+    // Notify user
+    user.notifications = user.notifications || [];
+    user.notifications.push({
+      message: '🔐 Your account password has been reset by an administrator. Please sign in with your new password.',
+      type: 'warning',
+      priority: 'high',
+      read: false
+    });
+
+    await user.save();
+
+    logAdminAction({
+      userId: req.userId,
+      action: 'ADMIN_RESET_PASSWORD',
+      targetId: user._id.toString(),
+      ip: req.ip
+    });
+
+    await logEvent({
+      actorType: 'admin',
+      actorId: req.userId,
+      action: 'ADMIN_RESET_PASSWORD',
+      targetUserId: user._id,
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+      success: true
+    });
+
+    res.json({ message: `Password reset for ${user.email}` });
+  } catch (error) {
+    logger.error('Error resetting user password', { message: error.message });
+    res.status(500).json({ message: 'Failed to reset password' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // EDIT USER BALANCE — override the displayed balance for a wallet address.
 // PATCH /admin/users/:id/balance
 // Body: { address: string, balanceOverrideBtc: number, balanceOverrideUsd?: number }

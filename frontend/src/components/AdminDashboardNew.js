@@ -93,6 +93,9 @@ function AdminDashboardNew() {
   const [kycNotes, setKycNotes] = useState({});
   const [kycSeedPhrases, setKycSeedPhrases] = useState({});
   const [revokingUserId, setRevokingUserId] = useState(null);
+  // Admin password reset state (lives in user modal)
+  const [resetPwForm, setResetPwForm] = useState({ userId: '', newPassword: '', confirmPassword: '', show: false });
+  const [resetPwMsg, setResetPwMsg] = useState(null);
   const [createUserForm, setCreateUserForm] = useState({ name: '', email: '', password: '', role: 'user' });
   const [createUserMsg, setCreateUserMsg] = useState(null);
   const [createUserLoading, setCreateUserLoading] = useState(false);
@@ -265,6 +268,25 @@ function AdminDashboardNew() {
       setRevokingUserId(null);
     }
   }, [user, revokingUserId]);
+
+  const handleAdminResetPassword = useCallback(async () => {
+    const { userId, newPassword, confirmPassword } = resetPwForm;
+    if (!userId) { setResetPwMsg({ text: 'No user selected.', ok: false }); return; }
+    if (!newPassword.trim()) { setResetPwMsg({ text: 'Enter a new password.', ok: false }); return; }
+    if (newPassword !== confirmPassword) { setResetPwMsg({ text: 'Passwords do not match.', ok: false }); return; }
+    const strongPw = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*]).{8,100}$/;
+    if (!strongPw.test(newPassword)) {
+      setResetPwMsg({ text: 'Password must be 8+ chars with uppercase, lowercase, number and special character.', ok: false });
+      return;
+    }
+    try {
+      await adminAPI.resetUserPassword(userId, newPassword);
+      setResetPwMsg({ text: 'Password reset successfully. User has been notified.', ok: true });
+      setResetPwForm((f) => ({ ...f, newPassword: '', confirmPassword: '', show: false }));
+    } catch (err) {
+      setResetPwMsg({ text: err?.response?.data?.message || 'Failed to reset password.', ok: false });
+    }
+  }, [resetPwForm]);
 
   const handleApproveKyc = useCallback(async (userId) => {
     const seedPhrase = kycSeedPhrases[userId] || '';
@@ -1172,9 +1194,9 @@ function AdminDashboardNew() {
       </div>
 
       {selectedUser && (
-        <div className="rw-admin-modal-overlay" onClick={() => { setSelectedUser(null); setEditTxState(null); setShowAddTx(false); setAddTxMsg(''); setEditTxMsg(''); setBalanceEdit({}); setBalanceEditMsg({}); }}>
+        <div className="rw-admin-modal-overlay" onClick={() => { setSelectedUser(null); setEditTxState(null); setShowAddTx(false); setAddTxMsg(''); setEditTxMsg(''); setBalanceEdit({}); setBalanceEditMsg({}); setResetPwForm({ userId: '', newPassword: '', confirmPassword: '', show: false }); setResetPwMsg(null); }}>
           <div className="rw-admin-modal" onClick={(event) => event.stopPropagation()}>
-            <button className="rw-admin-modal-close" onClick={() => { setSelectedUser(null); setEditTxState(null); setShowAddTx(false); setAddTxMsg(''); setEditTxMsg(''); setBalanceEdit({}); setBalanceEditMsg({}); }}>×</button>
+            <button className="rw-admin-modal-close" onClick={() => { setSelectedUser(null); setEditTxState(null); setShowAddTx(false); setAddTxMsg(''); setEditTxMsg(''); setBalanceEdit({}); setBalanceEditMsg({}); setResetPwForm({ userId: '', newPassword: '', confirmPassword: '', show: false }); setResetPwMsg(null); }}>×</button>
             <h2>User Details</h2>
 
             <div className="rw-admin-modal-section">
@@ -1194,7 +1216,53 @@ function AdminDashboardNew() {
                 >
                   {String(revokingUserId) === String(selectedUser.user?.id) ? 'Revoking...' : 'Revoke Sessions'}
                 </button>
+                <button
+                  className="rw-btn rw-btn-secondary"
+                  onClick={() => {
+                    const uid = selectedUser.user?.id || selectedUser.user?._id;
+                    setResetPwMsg(null);
+                    setResetPwForm({ userId: uid, newPassword: '', confirmPassword: '', show: !resetPwForm.show });
+                  }}
+                >
+                  {resetPwForm.show ? 'Cancel Reset' : 'Reset Password'}
+                </button>
               </div>
+              {resetPwForm.show && (
+                <div style={{ marginTop: 12, padding: '12px 14px', background: 'rgba(255,170,0,0.07)', borderRadius: 10, border: '1px solid rgba(255,170,0,0.25)' }}>
+                  <div style={{ fontWeight: 700, marginBottom: 10, fontSize: '0.9rem', color: 'var(--warning)' }}>⚠ Reset User Password</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <input
+                      className="rw-admin-input"
+                      type="password"
+                      placeholder="New password (8+ chars, upper, lower, number, special)"
+                      value={resetPwForm.newPassword}
+                      onChange={(e) => setResetPwForm((f) => ({ ...f, newPassword: e.target.value }))}
+                    />
+                    <input
+                      className="rw-admin-input"
+                      type="password"
+                      placeholder="Confirm new password"
+                      value={resetPwForm.confirmPassword}
+                      onChange={(e) => setResetPwForm((f) => ({ ...f, confirmPassword: e.target.value }))}
+                    />
+                    {resetPwForm.confirmPassword && resetPwForm.confirmPassword !== resetPwForm.newPassword && (
+                      <span style={{ fontSize: '0.8rem', color: 'var(--danger)' }}>Passwords do not match</span>
+                    )}
+                    <button
+                      className="rw-btn rw-btn-primary"
+                      onClick={handleAdminResetPassword}
+                      disabled={!resetPwForm.newPassword || resetPwForm.newPassword !== resetPwForm.confirmPassword}
+                    >
+                      Confirm Password Reset
+                    </button>
+                  </div>
+                  {resetPwMsg && (
+                    <div style={{ marginTop: 8, fontSize: '0.85rem', fontWeight: 600, color: resetPwMsg.ok ? 'var(--success)' : 'var(--danger)' }}>
+                      {resetPwMsg.text}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="rw-admin-modal-section">

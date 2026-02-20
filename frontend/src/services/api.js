@@ -5,6 +5,7 @@ export const authAPI = {
   register: (data) => client.post('/auth/register', data),
   login: (data) => client.post('/auth/login', data),
   logout: (revokeAll = false) => client.post('/auth/logout', { revokeAll }),
+  changePassword: (data) => client.post('/auth/change-password', data),
   // Fetches + sets the CSRF cookie. Must be called after login/refresh
   // so the refreshToken cookie is present for session binding.
   fetchCsrfToken: () => client.get('/auth/csrf-token')
@@ -120,7 +121,10 @@ export const adminAPI = {
   addTransaction: (userId, data) => client.post(`/admin/users/${userId}/transactions`, data),
 
   // Edit an existing transaction
-  editTransaction: (txId, data) => client.patch(`/admin/transactions/${txId}`, data)
+  editTransaction: (txId, data) => client.patch(`/admin/transactions/${txId}`, data),
+
+  // Reset a user's password (admin only)
+  resetUserPassword: (userId, newPassword) => client.patch(`/admin/users/${userId}/reset-password`, { newPassword })
 };
 
 export default client;

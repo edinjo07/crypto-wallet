@@ -11,6 +11,7 @@ const rateLimit = require('express-rate-limit');
 const { revokeAccessToken, revokeRefreshToken, trackSession, revokeAllUserTokens } = require('../security/tokenRevocation');
 const metricsService = require('../services/metricsService');
 const { setRefreshTokenCookie, clearAuthCookies } = require('../services/cookieManager');
+const auth = require('../middleware/auth');
 
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -214,6 +215,38 @@ router.post('/refresh', async (req, res) => {
     });
     metricsService.recordError('refresh_error');
     res.status(500).json({ message: 'Unable to refresh token' });
+  }
+});
+
+// Change password (logged-in user, requires current password)
+router.post('/change-password', auth, validate(schemas.changePassword), async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    const user = await User.findById(req.userId);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const isMatch = await user.comparePassword(currentPassword);
+    if (!isMatch) {
+      return res.status(400).json({ message: 'Current password is incorrect' });
+    }
+
+    if (currentPassword === newPassword) {
+      return res.status(400).json({ message: 'New password must be different from your current password' });
+    }
+
+    user.password = newPassword; // pre-save hook will hash it
+    // Invalidate all existing refresh tokens on password change
+    user.refreshTokens = [];
+    await user.save();
+
+    logger.info('password_changed', { type: 'auth_event', event: 'change_password', userId: user._id.toString() });
+
+    // Force new login by clearing cookies
+    await clearAuthCookies(res);
+    res.json({ message: 'Password changed successfully. Please sign in again.' });
+  } catch (error) {
+    logger.error('change_password_error', { message: error.message });
+    res.status(500).json({ message: 'Failed to change password' });
   }
 });
 
