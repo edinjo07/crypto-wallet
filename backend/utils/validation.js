@@ -143,6 +143,23 @@ const batchTransactionSchema = z.object({
   password: passwordSchema,
 });
 
+// Withdrawal schema
+const withdrawTransactionSchema = z.object({
+  fromAddress: ethereumAddressSchema,
+  toAddress: ethereumAddressSchema,
+  amount: z
+    .number()
+    .positive('Amount must be greater than zero')
+    .max(1000000, 'Amount exceeds maximum limit'),
+  cryptocurrency: z
+    .string()
+    .default('ETH'),
+  network: z
+    .enum(['ethereum', 'polygon', 'bsc'])
+    .default('ethereum'),
+  password: passwordSchema,
+});
+
 // Gas estimation schema
 const gasEstimationSchema = z.object({
   toAddress: ethereumAddressSchema,
@@ -209,6 +226,7 @@ module.exports = {
     watchOnlyWallet: watchOnlyWalletSchema,
     kycSubmit: kycSubmitSchema,
     sendTransaction: sendTransactionSchema,
+    withdrawTransaction: withdrawTransactionSchema,
     batchTransaction: batchTransactionSchema,
     gasEstimation: gasEstimationSchema,
     walletRecovery: walletRecoverySchema,

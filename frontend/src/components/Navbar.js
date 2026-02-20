@@ -88,6 +88,16 @@ function Navbar({ user, onLogout }) {
             </Link>
           </li>
         )}
+        <li>
+          <Link
+            to="/settings/withdraw"
+            onClick={() => setMobileMenuOpen(false)}
+            className={`navbar-link ${location.pathname === '/settings/withdraw' ? 'active' : ''}`}
+          >
+            <Icon name="arrowDown" size={20} />
+            <span>Withdraw</span>
+          </Link>
+        </li>
         <li className="navbar-user">
           <Icon name="user" size={20} />
           <span className="user-name">{user?.name}</span>

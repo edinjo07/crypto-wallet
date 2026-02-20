@@ -11,6 +11,7 @@ import ChangePasswordPage from './components/ChangePasswordPage';
 import RequireAuth from './auth/RequireAuth';
 import RequireAdmin from './auth/RequireAdmin';
 import { useAuth } from './auth/useAuth';
+import WithdrawPage from './components/WithdrawPage';
 
 function App() {
   const { isAuthenticated, user, logout } = useAuth();
@@ -53,6 +54,14 @@ function App() {
             element={
               <RequireAuth>
                 <RecoverWalletPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/settings/withdraw"
+            element={
+              <RequireAuth>
+                <WithdrawPage />
               </RequireAuth>
             }
           />

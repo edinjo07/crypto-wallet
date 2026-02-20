@@ -197,24 +197,24 @@ router.post('/deposit', auth, async (req, res) => {
 });
 
 // Withdraw request
-router.post('/withdraw', auth, idempotencyGuard(), async (req, res) => {
+router.post('/withdraw', auth, idempotencyGuard(), validate(schemas.withdrawTransaction), async (req, res) => {
   try {
     const { fromAddress, toAddress, amount, cryptocurrency, network, password } = req.body;
 
-    if (!requireString(fromAddress, 'From address', res) || !requireString(toAddress, 'To address', res)) {
-      return;
-    }
-    
     // Get user and find wallet
     const user = await User.findById(req.userId);
-    const wallet = user.wallets.find(w => 
+    const wallet = user.wallets.find(w =>
       w.address.toLowerCase() === fromAddress.toLowerCase()
     );
-    
+
     if (!wallet) {
       return res.status(404).json({ message: 'Wallet not found' });
     }
-    
+
+    if (wallet.watchOnly) {
+      return res.status(403).json({ message: 'Cannot withdraw from a watch-only wallet' });
+    }
+
     await nonceLock.withNonceLock(`wallet:${wallet.address}`, async () => {
       // Decrypt private key
       const privateKey = walletService.decryptPrivateKey(wallet, password);
