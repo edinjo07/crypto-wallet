@@ -77,10 +77,12 @@ function AdminDashboard() {
     loadData();
   }, [loadData]);
 
-  // Check if accessing from localhost
+  // Allow admin access from localhost (dev) or HTTPS (production deployment).
+  // Backend middleware enforces actual access control; this is a UI hint only.
   const isLocalhost = window.location.hostname === 'localhost' || 
                       window.location.hostname === '127.0.0.1' ||
-                      window.location.hostname === '::1';
+                      window.location.hostname === '::1' ||
+                      window.location.protocol === 'https:';
 
   const handleRoleChange = async (userId, newRole) => {
     if (window.confirm(`Are you sure you want to change this user's role to ${newRole}?`)) {

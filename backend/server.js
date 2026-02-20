@@ -46,7 +46,12 @@ if (process.env.NODE_ENV !== 'production') {
 const app = express();
 
 // Security Middleware
-app.use(helmet());
+// CSP is managed by vercel.json headers for all routes.
+// Helmet's contentSecurityPolicy is disabled here to avoid conflicting CSP headers
+// on API responses (which the browser could misinterpret as the page-level policy).
+app.use(helmet({
+  contentSecurityPolicy: false,
+}));
 // Support comma-separated CORS_ORIGIN for multiple allowed origins (e.g. Vercel preview + production URLs)
 const _corsAllowed = (process.env.CORS_ORIGIN || 'http://localhost:3000')
   .split(',')
