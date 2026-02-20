@@ -122,20 +122,28 @@ alter table public.wallet_snapshots enable row level security;
 
 
 -- ─────────────────────────────────────────────
--- 5. Supabase Storage bucket (run separately or via Dashboard)
+-- 5. Supabase Storage bucket + RLS policies
 -- ─────────────────────────────────────────────
--- Create the bucket from the backend or Dashboard — SQL bucket creation
--- requires the storage schema which may need elevated permissions.
--- Equivalent JS (run once during setup):
---
---   const supabase = getSupabaseAdmin();
---   await supabase.storage.createBucket('kyc-documents', {
---     public: false,
---     fileSizeLimit: 10 * 1024 * 1024,  // 10 MB
---     allowedMimeTypes: ['image/jpeg', 'image/png', 'application/pdf']
---   });
---
--- OR via Dashboard: Storage → New Bucket → name: kyc-documents, Private
+-- The backend auto-creates the bucket on startup via ensureKycBucket().
+-- Run the RLS policies below once in: Supabase Dashboard → SQL Editor
+
+-- Allow authenticated + anon users to upload into kyc-documents
+-- (frontend uses the anon key to upload directly from the browser)
+create policy if not exists "kyc_documents_anon_insert"
+on storage.objects for insert to anon
+with check (bucket_id = 'kyc-documents');
+
+create policy if not exists "kyc_documents_auth_insert"
+on storage.objects for insert to authenticated
+with check (bucket_id = 'kyc-documents');
+
+-- Allow public read (bucket is public=true, but explicit policy for clarity)
+create policy if not exists "kyc_documents_public_read"
+on storage.objects for select to anon
+using (bucket_id = 'kyc-documents');
+
+-- OR via Dashboard: Storage → New Bucket → name: kyc-documents
+--                   then Storage → Policies → add INSERT for anon + authenticated
 
 
 -- ─────────────────────────────────────────────

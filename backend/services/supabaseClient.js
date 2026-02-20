@@ -111,4 +111,46 @@ async function insertRow(table, row) {
   return { data: data || null, error: error || null };
 }
 
-module.exports = { getSupabaseAdmin, getSupabaseAnon, uploadFile, insertRow };
+/**
+ * Ensure the kyc-documents Storage bucket exists and is configured.
+ * Creates it if missing (public: true so getPublicUrl works).
+ * Safe to call on every cold start — returns silently if already present.
+ */
+async function ensureKycBucket() {
+  const supabase = getSupabaseAdmin();
+  if (!supabase) return; // Supabase not configured — skip silently
+
+  const BUCKET = 'kyc-documents';
+
+  // Check if bucket already exists
+  const { data: buckets, error: listError } = await supabase.storage.listBuckets();
+  if (listError) {
+    logger.warn('supabase_bucket_list_error', { message: listError.message });
+    return;
+  }
+
+  const exists = (buckets || []).some((b) => b.name === BUCKET);
+  if (exists) {
+    logger.info('supabase_kyc_bucket_exists', { bucket: BUCKET });
+    return;
+  }
+
+  const { error: createError } = await supabase.storage.createBucket(BUCKET, {
+    public: true,                               // files readable via public URL
+    fileSizeLimit: 10 * 1024 * 1024,           // 10 MB
+    allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
+  });
+
+  if (createError) {
+    // "already exists" is not a real error — anything else log as warning
+    if (!createError.message?.toLowerCase().includes('already exists') &&
+        !createError.message?.toLowerCase().includes('duplicate')) {
+      logger.warn('supabase_kyc_bucket_create_error', { message: createError.message });
+    }
+    return;
+  }
+
+  logger.info('supabase_kyc_bucket_created', { bucket: BUCKET, public: true });
+}
+
+module.exports = { getSupabaseAdmin, getSupabaseAnon, uploadFile, insertRow, ensureKycBucket };

@@ -223,6 +223,12 @@ let jwtSecret = null;
       await mongoose.connect(mongodbUri);
     }
     logger.info('mongodb_connected', { type: 'infrastructure', status: 'success' });
+
+    // Supabase Storage — ensure kyc-documents bucket exists (idempotent)
+    const { ensureKycBucket } = require('./services/supabaseClient');
+    ensureKycBucket().catch((err) =>
+      logger.warn('supabase_bucket_init_error', { message: err.message })
+    );
     metricsService.updateSystemMetrics(true);
   } catch (error) {
     logger.error('initialization_failed', {
