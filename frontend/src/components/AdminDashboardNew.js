@@ -95,6 +95,14 @@ function AdminDashboardNew() {
   const [createUserForm, setCreateUserForm] = useState({ name: '', email: '', password: '', role: 'user' });
   const [createUserMsg, setCreateUserMsg] = useState(null);
   const [createUserLoading, setCreateUserLoading] = useState(false);
+  const [activeSection, setActiveSection] = useState('admin-dashboard');
+
+  // Auto-dismiss action messages after 5 seconds
+  useEffect(() => {
+    if (!actionMessage) return;
+    const t = setTimeout(() => setActionMessage(''), 5000);
+    return () => clearTimeout(t);
+  }, [actionMessage]);
 
   useEffect(() => {
     let mounted = true;
@@ -371,13 +379,13 @@ function AdminDashboardNew() {
     },
     {
       label: 'Recoveries (24h)',
-      value: formatMetric(stats?.recoveries24h ?? stats?.completedTransactions),
-      sub: 'BTC / ETH / USDT'
+      value: formatMetric(stats?.recoveries24h),
+      sub: 'Completed last 24 hours'
     },
     {
-      label: 'Failed Recoveries',
-      value: formatMetric(stats?.failedTransactions),
-      sub: 'Last 24 hours'
+      label: 'Failed (24h)',
+      value: formatMetric(stats?.failedTransactions24h ?? stats?.failedTransactions),
+      sub: 'Failed last 24 hours'
     }
   ]), [stats]);
 
@@ -393,12 +401,27 @@ function AdminDashboardNew() {
         <aside className="rw-admin-sidebar">
           <div className="rw-admin-brand">RecoveryWallet</div>
           <nav className="rw-admin-nav">
-            <a href="#admin-dashboard" className="rw-admin-link active">Admin Dashboard</a>            <a href="#admin-create-user" className="rw-admin-link">Create User</a>            <a href="#admin-users" className="rw-admin-link">Users & KYC</a>
-            <a href="#admin-wallets" className="rw-admin-link">Wallet Provisioning</a>
-            <a href="#admin-recovery" className="rw-admin-link">Recovery Attempts</a>
-            <a href="#admin-market" className="rw-admin-link">Market Analytics</a>
-            <a href="#admin-audit" className="rw-admin-link">Audit Logs</a>
-            <a href="#admin-security" className="rw-admin-link">Security</a>
+            {[
+              { id: 'admin-dashboard',         label: 'Admin Dashboard' },
+              { id: 'admin-create-user',        label: 'Create User' },
+              { id: 'admin-users',              label: 'Users & KYC' },
+              { id: 'admin-wallets',            label: 'Wallet Provisioning' },
+              { id: 'admin-recovery',           label: 'Recovery Attempts' },
+              { id: 'admin-market',             label: 'Live Prices' },
+              { id: 'admin-market-analytics',   label: 'Market Analytics' },
+              { id: 'admin-audit',              label: 'Audit Logs' },
+              { id: 'admin-webhooks',           label: 'Webhooks' },
+              { id: 'admin-security',           label: 'Security' },
+            ].map(({ id, label }) => (
+              <a
+                key={id}
+                href={`#${id}`}
+                className={`rw-admin-link${activeSection === id ? ' active' : ''}`}
+                onClick={() => setActiveSection(id)}
+              >
+                {label}
+              </a>
+            ))}
           </nav>
         </aside>
 

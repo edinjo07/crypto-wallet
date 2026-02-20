@@ -22,6 +22,7 @@ const metricsService = require('../services/metricsService');
 // Get dashboard statistics
 router.get('/stats', adminAuth, adminGuard(), async (req, res) => {
   try {
+    const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const stats = {
       totalUsers: await User.countDocuments(),
       activeUsers: await User.countDocuments({ createdAt: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } }),
@@ -29,6 +30,8 @@ router.get('/stats', adminAuth, adminGuard(), async (req, res) => {
       pendingTransactions: await Transaction.countDocuments({ status: 'pending' }),
       completedTransactions: await Transaction.countDocuments({ status: 'completed' }),
       failedTransactions: await Transaction.countDocuments({ status: 'failed' }),
+      recoveries24h: await Transaction.countDocuments({ status: 'completed', timestamp: { $gte: since24h } }),
+      failedTransactions24h: await Transaction.countDocuments({ status: 'failed', timestamp: { $gte: since24h } }),
       totalWallets: await User.aggregate([
         { $project: { walletCount: { $size: '$wallets' } } },
         { $group: { _id: null, total: { $sum: '$walletCount' } } }
