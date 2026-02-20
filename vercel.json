@@ -3,6 +3,11 @@
   "buildCommand": "npm install && cd frontend && npm install && CI=false REACT_APP_API_URL=/api npm run build",
   "outputDirectory": "frontend/build",
   "framework": null,
+  "functions": {
+    "backend/server.js": {
+      "maxDuration": 30
+    }
+  },
   "headers": [
     {
       "source": "/(.*)",
