@@ -3813,6 +3813,69 @@ body {
   word-break: break-word;
 }
 
+/* Seed phrase warning banner */
+.rw-recover-seed-warning {
+  background: rgba(255, 170, 0, 0.12);
+  border: 1.5px solid rgba(255, 170, 0, 0.55);
+  border-radius: 12px;
+  padding: 14px 18px;
+  color: #ffc107;
+  font-size: 0.93rem;
+  line-height: 1.6;
+  margin-bottom: 16px;
+}
+
+/* 4-column grid of numbered seed words */
+.rw-recover-seed-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin: 16px 0;
+}
+
+@media (max-width: 600px) {
+  .rw-recover-seed-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.rw-recover-seed-word {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-family: 'SF Mono', 'Courier New', monospace;
+}
+
+.rw-recover-seed-num {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  min-width: 18px;
+  font-weight: 600;
+}
+
+.rw-recover-seed-word-text {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--primary);
+  letter-spacing: 0.3px;
+}
+
+/* Save-phrase tip at the bottom */
+.rw-recover-seed-tip {
+  background: rgba(74, 158, 255, 0.08);
+  border: 1px solid rgba(74, 158, 255, 0.25);
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  line-height: 1.55;
+  margin-top: 12px;
+}
+
 @media (max-width: 960px) {
   .rw-admin-app {
     grid-template-columns: 1fr;

@@ -434,7 +434,19 @@ function RecoverWalletPage() {
         {showSeedButton && (
           <div className="rw-recover-box">
             <p><strong>Recovery seed available</strong></p>
-            <p>Your recovery seed has been securely prepared. You may reveal it once.</p>
+            <p>Your 12-word recovery seed phrase has been securely prepared by your administrator. You may reveal it <strong>once</strong> — it will not be shown again.</p>
+            <div style={{
+              background: 'rgba(255, 170, 0, 0.1)',
+              border: '1px solid rgba(255, 170, 0, 0.4)',
+              borderRadius: 10,
+              padding: '10px 14px',
+              fontSize: '0.87rem',
+              color: '#ffc107',
+              marginBottom: 14,
+              lineHeight: 1.6
+            }}>
+              ⚠️ Make sure you are in a private location. Have pen and paper ready to write down the 12 words before clicking reveal.
+            </div>
             {recoveryBalance && (
               <div className="rw-recover-frozen">
                 Frozen balance: {typeof recoveryBalance.amount === 'number'
@@ -457,15 +469,39 @@ function RecoverWalletPage() {
           </div>
         )}
 
-        {showSeedRevealed && (
+        {showSeedRevealed && !seedPayload && (
           <div className="rw-recover-error">
-            Write this seed phrase down and never share it. It cannot be shown again.
+            Your seed phrase has already been revealed once and cannot be displayed again. If you did not record it, please contact support immediately.
           </div>
         )}
 
         {seedPayload && (
           <div className="rw-recover-seed">
-            <div className="rw-recover-seed-box">{seedPayload.mnemonic}</div>
+            <div className="rw-recover-seed-warning">
+              ⚠️ <strong>Save these 12 words immediately.</strong> Write them down on paper and store them offline in a safe location. This phrase <strong>will NOT be shown again</strong> — it is the only way to recover your wallet.
+            </div>
+            <div className="rw-recover-seed-grid">
+              {seedPayload.mnemonic.trim().split(/\s+/).map((word, i) => (
+                <div key={i} className="rw-recover-seed-word">
+                  <span className="rw-recover-seed-num">{i + 1}</span>
+                  <span className="rw-recover-seed-word-text">{word}</span>
+                </div>
+              ))}
+            </div>
+            <button
+              className="rw-btn rw-btn-secondary"
+              style={{ marginTop: '1rem' }}
+              onClick={() => {
+                navigator.clipboard.writeText(seedPayload.mnemonic).then(() => {
+                  alert('Seed phrase copied to clipboard. Paste it somewhere secure now.');
+                }).catch(() => {});
+              }}
+            >
+              Copy All 12 Words
+            </button>
+            <div className="rw-recover-seed-tip">
+              💡 Do not store this phrase in email, cloud storage, or screenshots. Consider writing it on paper and keeping it in a secure location like a safe.
+            </div>
           </div>
         )}
       </div>

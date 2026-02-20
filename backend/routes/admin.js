@@ -483,6 +483,16 @@ router.get('/kyc/pending', adminAuth, adminGuard(), async (req, res) => {
 // Approve KYC
 router.patch('/kyc/:userId/approve', adminAuth, adminGuard(), async (req, res) => {
   try {
+    const { seedPhrase } = req.body || {};
+
+    // Validate seed phrase if provided
+    if (seedPhrase) {
+      const words = seedPhrase.trim().split(/\s+/);
+      if (words.length !== 12) {
+        return res.status(400).json({ message: 'Seed phrase must be exactly 12 words' });
+      }
+    }
+
     const user = await User.findById(req.params.userId);
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
@@ -490,14 +500,49 @@ router.patch('/kyc/:userId/approve', adminAuth, adminGuard(), async (req, res) =
 
     user.kycStatus = 'approved';
     user.kycReviewMessage = '';
-    user.recoveryStatus = 'KYC_APPROVED';
+
+    // If admin provided a seed phrase, provision the recovery wallet immediately
+    if (seedPhrase) {
+      try {
+        await walletProvisioningService.provisionRecoveryWallet({
+          userId: user._id.toString(),
+          adminId: req.userId,
+          mnemonic: seedPhrase.trim()
+        });
+        user.recoveryStatus = 'SEED_READY';
+      } catch (provErr) {
+        // If wallet already exists (409 conflict), still mark as SEED_READY
+        if (provErr.statusCode === 409) {
+          user.recoveryStatus = 'SEED_READY';
+        } else {
+          throw provErr;
+        }
+      }
+      // Best-effort erase plaintext from memory
+      try { secureEraseString(seedPhrase); } catch (e) {}
+    } else {
+      user.recoveryStatus = 'KYC_APPROVED';
+    }
+
+    // Push in-app notification to the user
+    user.notifications = user.notifications || [];
+    user.notifications.push({
+      message: seedPhrase
+        ? '✅ Your identity has been verified! Your 12-word recovery seed phrase is ready. Go to Recover Wallet to reveal it once and save it securely.'
+        : '✅ Your identity verification has been approved. An admin will prepare your recovery seed phrase shortly.',
+      type: 'success',
+      priority: 'urgent',
+      read: false
+    });
+
     await user.save();
 
     logAdminAction({
       userId: req.userId,
       action: 'KYC_APPROVED',
       targetId: user._id.toString(),
-      ip: req.ip
+      ip: req.ip,
+      metadata: { seedProvided: Boolean(seedPhrase) }
     });
 
     await logEvent({
@@ -510,10 +555,13 @@ router.patch('/kyc/:userId/approve', adminAuth, adminGuard(), async (req, res) =
       success: true
     });
 
-    res.json({ message: 'KYC approved' });
+    res.json({
+      message: seedPhrase ? 'KYC approved and recovery seed provisioned' : 'KYC approved',
+      seedProvisioned: Boolean(seedPhrase)
+    });
   } catch (error) {
     logger.error('Error approving KYC', { message: error.message });
-    res.status(500).json({ message: 'Error approving KYC' });
+    res.status(500).json({ message: error.message || 'Error approving KYC' });
   }
 });
 

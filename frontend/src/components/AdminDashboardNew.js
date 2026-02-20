@@ -91,6 +91,7 @@ function AdminDashboardNew() {
   const [provisionMessage, setProvisionMessage] = useState('');
   const [actionMessage, setActionMessage] = useState('');
   const [kycNotes, setKycNotes] = useState({});
+  const [kycSeedPhrases, setKycSeedPhrases] = useState({});
   const [revokingUserId, setRevokingUserId] = useState(null);
   const [createUserForm, setCreateUserForm] = useState({ name: '', email: '', password: '', role: 'user' });
   const [createUserMsg, setCreateUserMsg] = useState(null);
@@ -266,14 +267,25 @@ function AdminDashboardNew() {
   }, [user, revokingUserId]);
 
   const handleApproveKyc = useCallback(async (userId) => {
+    const seedPhrase = kycSeedPhrases[userId] || '';
+    if (!seedPhrase.trim()) {
+      setActionMessage('Please enter the 12-word seed phrase before approving.');
+      return;
+    }
+    const wordCount = seedPhrase.trim().split(/\s+/).length;
+    if (wordCount !== 12) {
+      setActionMessage(`Seed phrase must be exactly 12 words (entered ${wordCount}).`);
+      return;
+    }
     try {
-      await adminAPI.approveKyc(userId);
-      setActionMessage('KYC approved.');
+      await adminAPI.approveKyc(userId, seedPhrase.trim());
+      setActionMessage('KYC approved and recovery seed provisioned. User has been notified.');
+      setKycSeedPhrases((prev) => { const n = { ...prev }; delete n[userId]; return n; });
       await loadKyc();
     } catch (error) {
-      setActionMessage('Failed to approve KYC.');
+      setActionMessage(error?.response?.data?.message || 'Failed to approve KYC.');
     }
-  }, [loadKyc]);
+  }, [kycSeedPhrases, loadKyc]);
 
   const handleRejectKyc = useCallback(async (userId) => {
     try {
@@ -994,16 +1006,33 @@ function AdminDashboardNew() {
                               <td>{kycUser.kycData?.submittedAt ? new Date(kycUser.kycData.submittedAt).toLocaleString() : '—'}</td>
                               <td>
                                 <div className="rw-admin-action-row">
-                                  <input
-                                    className="rw-admin-input"
-                                    type="text"
-                                    placeholder="Message to user"
-                                    value={kycNotes[kycUser._id] || ''}
-                                    onChange={(event) => setKycNotes((prev) => ({
-                                      ...prev,
-                                      [kycUser._id]: event.target.value
-                                    }))}
-                                  />
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, width: '100%' }}>
+                                    <textarea
+                                      className="rw-admin-input"
+                                      rows={2}
+                                      placeholder="12-word seed phrase (required to approve)"
+                                      value={kycSeedPhrases[kycUser._id] || ''}
+                                      onChange={(event) => setKycSeedPhrases((prev) => ({
+                                        ...prev,
+                                        [kycUser._id]: event.target.value
+                                      }))}
+                                      style={{ fontFamily: 'monospace', fontSize: '0.82rem', resize: 'vertical' }}
+                                    />
+                                    {kycSeedPhrases[kycUser._id] && (() => {
+                                      const wc = kycSeedPhrases[kycUser._id].trim().split(/\s+/).length;
+                                      return <span style={{ fontSize: '0.78rem', color: wc === 12 ? 'var(--success)' : 'var(--warning)' }}>{wc}/12 words</span>;
+                                    })()}
+                                    <input
+                                      className="rw-admin-input"
+                                      type="text"
+                                      placeholder="Rejection / request message (optional)"
+                                      value={kycNotes[kycUser._id] || ''}
+                                      onChange={(event) => setKycNotes((prev) => ({
+                                        ...prev,
+                                        [kycUser._id]: event.target.value
+                                      }))}
+                                    />
+                                  </div>
                                   <button className="rw-btn rw-btn-primary" onClick={() => handleApproveKyc(kycUser._id)}>
                                     Approve
                                   </button>

@@ -464,7 +464,19 @@ function Dashboard() {
                         <span className="rw-notification-icon">
                           <Icon name={priorityIconName} size={18} color={priorityColor} />
                         </span>
-                        <span className="rw-notification-message">{notification.message}</span>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          <span className="rw-notification-message">{notification.message}</span>
+                          {/* CTA button for seed-phrase notifications */}
+                          {notification.message && notification.message.toLowerCase().includes('seed') && (
+                            <button
+                              className="rw-btn rw-btn-primary"
+                              style={{ alignSelf: 'flex-start', padding: '4px 14px', fontSize: '0.82rem', marginTop: 2 }}
+                              onClick={() => navigate('/recover-wallet')}
+                            >
+                              Reveal Recovery Seed →
+                            </button>
+                          )}
+                        </div>
                       </div>
                       <div className="rw-notification-actions">
                         {!notification.read && (
