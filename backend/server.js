@@ -243,6 +243,30 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// Debug endpoint — tests Supabase connection and env var presence
+app.get('/api/debug', async (req, res) => {
+  const hasUrl = !!process.env.SUPABASE_URL;
+  const hasKey = !!process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const hasCookie = !!process.env.COOKIE_SECRET;
+  const hasJwt = !!process.env.JWT_SECRET;
+  let dbOk = false;
+  let dbError = null;
+  try {
+    const { getSupabaseAdmin } = require('./services/supabaseClient');
+    const db = getSupabaseAdmin();
+    if (db) {
+      const { data, error } = await db.from('users').select('id').limit(1);
+      dbOk = !error;
+      dbError = error ? error.message : null;
+    } else {
+      dbError = 'getSupabaseAdmin() returned null';
+    }
+  } catch (e) {
+    dbError = e.message;
+  }
+  res.json({ hasUrl, hasKey, hasCookie, hasJwt, dbOk, dbError });
+});
+
 // Prometheus metrics endpoint
 app.get('/api/metrics', (req, res) => {
   metricsService.updateSystemMetrics(true);

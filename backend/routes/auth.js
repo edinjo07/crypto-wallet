@@ -152,7 +152,7 @@ router.post('/login', loginLimiter, validate(schemas.login), async (req, res) =>
     if (error.message && error.message.includes('Supabase not configured')) {
       return res.status(503).json({ message: 'Database not configured. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in Vercel environment variables.' });
     }
-    res.status(500).json({ message: 'Server error during login' });
+    res.status(500).json({ message: 'Server error during login', detail: error.message });
   }
 });
 
