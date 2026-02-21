@@ -115,13 +115,23 @@ app.use(validateCookieSameSite);
 app.use(autoRefreshCookieTTL);
 
 // CSRF Protection via csrf-csrf (Double Submit Cookie pattern)
-// Auth endpoints are excluded as they bootstrap session state
+// Auth endpoints are excluded as they bootstrap session state.
+// Bearer-token-authenticated routes are also excluded — CSRF attacks cannot
+// forge custom Authorization headers, making CSRF protection redundant there.
 const CSRF_SKIP_PATHS = [
   '/api/auth/login',
   '/api/auth/register',
   '/api/auth/refresh',
   '/api/auth/logout',
   '/api/auth/csrf-token',
+  '/api/admin',
+  '/api/wallet',
+  '/api/transactions',
+  '/api/tokens',
+  '/api/prices',
+  '/api/health',
+  '/api/debug',
+  '/api/metrics',
 ];
 const { doubleCsrfProtection, generateCsrfToken } = doubleCsrf({
   getSecret: () => process.env.COOKIE_SECRET,
