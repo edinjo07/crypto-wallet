@@ -122,13 +122,11 @@ function Navbar({ user, onLogout }) {
       </ul>
 
       {/* Mobile Menu Overlay */}
-      {mobileMenuOpen && (
-        <div 
-          className="mobile-menu-overlay" 
-          onClick={() => setMobileMenuOpen(false)}
-          aria-hidden="true"
-        />
-      )}
+      <div 
+        className={`mobile-menu-overlay${mobileMenuOpen ? ' mobile-menu-open' : ''}`}
+        onClick={() => setMobileMenuOpen(false)}
+        aria-hidden="true"
+      />
     </nav>
   );
 }
