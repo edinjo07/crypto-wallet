@@ -11,7 +11,6 @@ const logger = require('./core/logger');
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
-const { Server } = require('socket.io');
 const { getLiveUsdPrices } = require('./services/pricesService');
 const metricsService = require('./services/metricsService');
 const { sessionMiddleware, autoRefreshCookieTTL, validateCookieSameSite } = require('./middleware/cookieSession');
@@ -341,6 +340,7 @@ try {
 }
 
 if (!isVercel) {
+const { Server } = require('socket.io');
 const io = new Server(server, {
   cors: {
     origin: process.env.SOCKET_CORS_ORIGIN || '*',
