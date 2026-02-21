@@ -54,6 +54,7 @@ class TransactionQuery {
   limit(n) { this._limit = parseInt(n, 10); return this; }
   skip(n) { this._skip = parseInt(n, 10); return this; }
   select(_f) { return this; }
+  lean()      { return this; } // no-op
   populate(field) { this._populateField = field; return this; }
   async exec() {
     const db = getDb();

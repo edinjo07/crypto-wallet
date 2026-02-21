@@ -151,6 +151,17 @@ class UserQuery {
   catch(reject) { return this.exec().catch(reject); }
 }
 
+// ── Chainable wrapper for findById (supports .select(), .lean(), .populate()) ──
+class FindByIdQuery {
+  constructor(id) { this._id = id; }
+  select() { return this; }  // no-op — password excluded by DTO layer
+  lean()   { return this; }  // no-op — always plain objects
+  populate() { return this; } // no-op
+  _resolve() { return this._id ? loadFull(this._id) : Promise.resolve(null); }
+  then(resolve, reject) { return this._resolve().then(resolve, reject); }
+  catch(reject) { return this._resolve().catch(reject); }
+}
+
 // ── Static model ───────────────────────────────────────────────────────────
 class User {
   constructor(data) {
@@ -232,9 +243,9 @@ class User {
     return doc;
   }
 
-  static async findById(id) {
-    if (!id) return null;
-    return loadFull(String(id));
+  static findById(id) {
+    if (!id) return new FindByIdQuery(null);
+    return new FindByIdQuery(String(id));
   }
 
   static async findOne(filter) {
