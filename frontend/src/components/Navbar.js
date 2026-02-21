@@ -47,8 +47,8 @@ function Navbar({ user, onLogout }) {
         <span className="brand-text">CryptoWallet</span>
       </div>
 
-      {/* Back to Dashboard — mobile only, shown on non-dashboard pages */}
-      {location.pathname !== '/dashboard' && (
+      {/* Back to Dashboard — mobile only, shown on non-dashboard pages, hidden for admins */}
+      {!user?.isAdmin && location.pathname !== '/dashboard' && (
         <Link to="/dashboard" className="navbar-back-btn">
           <Icon name="chevronLeft" size={18} />
           <span>Dashboard</span>
@@ -66,17 +66,8 @@ function Navbar({ user, onLogout }) {
       </button>
 
       <ul className={`navbar-menu ${mobileMenuOpen ? 'mobile-menu-open' : ''}`}>
-        <li>
-          <Link 
-            to="/dashboard" 
-            onClick={() => setMobileMenuOpen(false)} 
-            className={`navbar-link ${location.pathname === '/dashboard' ? 'active' : ''}`}
-          >
-            <Icon name="pieChart" size={20} />
-            <span>Dashboard</span>
-          </Link>
-        </li>
-        {user?.isAdmin && (
+        {user?.isAdmin ? (
+          /* Admin-only navigation */
           <li>
             <Link 
               to="/admin" 
@@ -84,20 +75,34 @@ function Navbar({ user, onLogout }) {
               className={`navbar-link navbar-link-admin ${location.pathname === '/admin' ? 'active' : ''}`}
             >
               <Icon name="shield" size={20} />
-              <span>Admin</span>
+              <span>Admin Panel</span>
             </Link>
           </li>
+        ) : (
+          /* Regular user navigation */
+          <>
+            <li>
+              <Link 
+                to="/dashboard" 
+                onClick={() => setMobileMenuOpen(false)} 
+                className={`navbar-link ${location.pathname === '/dashboard' ? 'active' : ''}`}
+              >
+                <Icon name="pieChart" size={20} />
+                <span>Dashboard</span>
+              </Link>
+            </li>
+            <li>
+              <Link
+                to="/settings/withdraw"
+                onClick={() => setMobileMenuOpen(false)}
+                className={`navbar-link ${location.pathname === '/settings/withdraw' ? 'active' : ''}`}
+              >
+                <Icon name="arrowDown" size={20} />
+                <span>Withdraw</span>
+              </Link>
+            </li>
+          </>
         )}
-        <li>
-          <Link
-            to="/settings/withdraw"
-            onClick={() => setMobileMenuOpen(false)}
-            className={`navbar-link ${location.pathname === '/settings/withdraw' ? 'active' : ''}`}
-          >
-            <Icon name="arrowDown" size={20} />
-            <span>Withdraw</span>
-          </Link>
-        </li>
         <li className="navbar-user">
           <Icon name="user" size={20} />
           <span className="user-name">{user?.name}</span>

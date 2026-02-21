@@ -23,7 +23,7 @@ function App() {
         <Routes>
           <Route 
             path="/login" 
-            element={!isAuthenticated ? <Login /> : <Navigate to="/dashboard" />} 
+            element={!isAuthenticated ? <Login /> : (user?.isAdmin ? <Navigate to="/admin" /> : <Navigate to="/dashboard" />)} 
           />
           <Route 
             path="/admin-login" 
@@ -36,9 +36,9 @@ function App() {
           <Route 
             path="/dashboard" 
             element={
-              <RequireAuth>
-                <Dashboard />
-              </RequireAuth>
+              isAuthenticated && user?.isAdmin
+                ? <Navigate to="/admin" replace />
+                : <RequireAuth><Dashboard /></RequireAuth>
             } 
           />
           <Route
@@ -75,7 +75,7 @@ function App() {
           />
           <Route 
             path="/" 
-            element={<Navigate to={isAuthenticated ? "/dashboard" : "/login"} />} 
+            element={<Navigate to={!isAuthenticated ? "/login" : user?.isAdmin ? "/admin" : "/dashboard"} />} 
           />
         </Routes>
       </div>
