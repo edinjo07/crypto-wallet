@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { authAPI } from '../services/api';
 import { useAuth } from '../auth/useAuth';
 import Icon from './Icon';
@@ -126,22 +126,6 @@ function Login() {
           </button>
         </form>
         
-        <div style={{ 
-          marginTop: '2rem', 
-          padding: '1rem', 
-          borderTop: '1px solid rgba(200, 200, 200, 0.3)',
-          textAlign: 'center',
-          fontSize: '0.9rem',
-          color: '#666'
-        }}>
-          Are you an administrator? <Link to="/admin-login" style={{ 
-            color: '#667eea',
-            fontWeight: '600',
-            textDecoration: 'none',
-            transition: 'all 0.3s ease'
-          }}>Access Admin Portal</Link>
-        </div>
-
         <div style={{
           marginTop: '1rem',
           padding: '0.75rem 1rem',
