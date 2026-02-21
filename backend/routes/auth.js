@@ -148,6 +148,10 @@ router.post('/login', loginLimiter, validate(schemas.login), async (req, res) =>
     });
     metricsService.recordAuthEvent('login', false);
     metricsService.recordError('login_error');
+    // Surface configuration errors clearly so they appear in Vercel logs
+    if (error.message && error.message.includes('Supabase not configured')) {
+      return res.status(503).json({ message: 'Database not configured. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in Vercel environment variables.' });
+    }
     res.status(500).json({ message: 'Server error during login' });
   }
 });

@@ -71,9 +71,12 @@ app.use(cors({
   ]
 }));
 app.use(express.json({ limit: '10mb' }));
-const cookieSecret = process.env.COOKIE_SECRET;
+let cookieSecret = process.env.COOKIE_SECRET;
 if (!cookieSecret) {
-  throw new Error('COOKIE_SECRET environment variable is required for security');
+  // Generate a per-process secret rather than crashing the serverless function.
+  // Sessions won't survive across cold-starts, but the service stays up.
+  cookieSecret = crypto.randomBytes(32).toString('hex');
+  logger.warn('COOKIE_SECRET not set — generated ephemeral secret. Set COOKIE_SECRET in Vercel env vars.');
 }
 app.use(cookieParser(cookieSecret));
 
