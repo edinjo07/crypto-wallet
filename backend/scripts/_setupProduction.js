@@ -2,21 +2,30 @@
 /**
  * One-shot production setup:
  * 1. Runs supabase-schema.sql against the live Supabase DB
- * 2. Creates the admin user  admin@bluewallet.security / Italy101!@
+ * 2. Creates or ensures the admin user exists
+ *
+ * Required env vars (set in .env or shell):
+ *   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, POSTGRES_URL,
+ *   ADMIN_EMAIL, ADMIN_PASSWORD
  */
+require('dotenv').config({ path: require('path').join(__dirname, '../../.env') });
 const { Client } = require('pg');
 const { createClient } = require('@supabase/supabase-js');
 const bcrypt = require('bcryptjs');
-const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 
-const SUPABASE_URL = 'https://vwbijbycnqobdlvnyisw.supabase.co';
-const SUPABASE_SERVICE_ROLE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ3YmlqYnljbnFvYmRsdm55aXN3Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTUzNjc0OSwiZXhwIjoyMDg3MTEyNzQ5fQ.KEd5l46hC2aR8T8ZzcrcZrT1vGAnM5GEKuLoJ4SmLN4';
-const POSTGRES_URL = 'postgres://postgres.vwbijbycnqobdlvnyisw:RMkA8YfVFP5a4Zqe@aws-1-us-east-1.pooler.supabase.com:5432/postgres?sslmode=require&uselibpqcompat=true';
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const POSTGRES_URL = process.env.POSTGRES_URL;
 
-const ADMIN_EMAIL = 'admin@bluewallet.security';
-const ADMIN_PASSWORD = 'Italy101!@';
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@bluewallet.security';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+
+if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !POSTGRES_URL || !ADMIN_PASSWORD) {
+  console.error('Missing required env vars: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, POSTGRES_URL, ADMIN_PASSWORD');
+  process.exit(1);
+}
 
 async function runSchema() {
   console.log('\n=== STEP 1: Running SQL schema ===');
@@ -87,7 +96,7 @@ async function main() {
     await runSchema();
     await createAdmin();
     console.log('\n=== Setup complete ===');
-    console.log('Login: admin@bluewallet.security / Italy101!@');
+    console.log(`Login: ${ADMIN_EMAIL}`);
   } catch (err) {
     console.error('\nSetup failed:', err.message);
     process.exit(1);

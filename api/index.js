@@ -8,12 +8,12 @@ try {
   loadError = err;
   app = (req, res) => {
     res.setHeader('Content-Type', 'application/json');
+    // Log full details server-side but never expose stack traces to clients
+    console.error('[api/index] module-load crash:', loadError?.message, loadError?.stack);
     res.status(500).end(JSON.stringify({
       crashed: true,
       phase: 'module-load',
-      error: loadError.message,
-      stack: loadError.stack,
-      node: process.version,
+      message: 'Internal server error. Check server logs for details.',
     }));
   };
 }
