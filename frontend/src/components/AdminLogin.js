@@ -38,6 +38,8 @@ function AdminLogin() {
       }
 
       login(response.data.token, response.data.user);
+      // Fetch CSRF token now that refreshToken cookie is set
+      try { await authAPI.fetchCsrfToken(); } catch (_) { /* non-fatal */ }
       navigate('/admin', { replace: true });
     } catch (err) {
       setError(err.response?.data?.message || 'Login failed');
