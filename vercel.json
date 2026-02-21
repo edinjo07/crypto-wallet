@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "buildCommand": "npm install && cd frontend && npm install && CI=false REACT_APP_API_URL=/api npm run build",
+  "buildCommand": "npm install && cd frontend && npm install && CI=false REACT_APP_API_URL=/api REACT_APP_SUPABASE_URL=https://vwbijbycnqobdlvnyisw.supabase.co REACT_APP_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ3YmlqYnljbnFvYmRsdm55aXN3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE1MzY3NDksImV4cCI6MjA4NzExMjc0OX0.ItoP7AFdXnXV5G02LKae9_i8Cw7sMgRSrpYB8pZbvJs npm run build",
   "outputDirectory": "frontend/build",
   "framework": null,
   "headers": [
