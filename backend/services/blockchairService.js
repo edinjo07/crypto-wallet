@@ -300,9 +300,10 @@ class BlockchairService extends BaseService {
 
   /**
    * Get full transaction details for multiple hashes in one call.
-   * Uses the Blockchair batch dashboard endpoint (link_203):
-   *   GET /{chain}/dashboards/transaction/{hash0},{hash1},...
-   * Batches into groups of 10 (Blockchair's max per request).
+   * Uses the Blockchair BATCH dashboard endpoint (docs v2.0.63):
+   *   GET /{chain}/dashboards/transactions/{hash0},{hash1},...   (PLURAL)
+   * Single-transaction form uses the singular /dashboards/transaction/{hash}.
+   * Batches into groups of 10 (Blockchair's stated max per request).
    *
    * @param {string[]} hashes - Array of transaction hashes
    * @param {string}   chain  - Blockchain name (default: 'bitcoin')
@@ -318,8 +319,8 @@ class BlockchairService extends BaseService {
 
       for (let i = 0; i < hashes.length; i += BATCH_SIZE) {
         const batch = hashes.slice(i, i + BATCH_SIZE).join(',');
-        // Correct Blockchair endpoint: /dashboards/transaction/{h0},{h1},...  (singular)
-        const url = `${this.baseUrl}/${blockchainName}/dashboards/transaction/${batch}`;
+        // Plural /dashboards/transactions/ is the documented batch endpoint
+        const url = `${this.baseUrl}/${blockchainName}/dashboards/transactions/${batch}`;
 
         const params = {};
         if (this.apiKey) params.key = this.apiKey;
@@ -334,23 +335,133 @@ class BlockchairService extends BaseService {
   }
 
   /**
-   * Get mempool data (Bitcoin only)
-   * Useful for fee estimation
+   * Broadcast a raw signed transaction.
+   * POST /{chain}/push/transaction
+   * @param {string} rawHex - Raw transaction in hex
+   * @param {string} chain  - Blockchain name (default: 'bitcoin')
+   * @returns {string} Transaction hash on success
    */
-  async getMempoolData() {
-    return this.executeWithTracking('getMempoolData', async () => {
-      const url = `${this.baseUrl}/bitcoin/mempool/blocks`;
-      
+  async pushTransaction(rawHex, chain = 'bitcoin') {
+    return this.executeWithTracking('pushTransaction', async () => {
+      const blockchainName = this.supportedChains[chain] || chain;
+      const url = `${this.baseUrl}/${blockchainName}/push/transaction`;
+
       const params = {};
-      if (this.apiKey) {
-        params.key = this.apiKey;
-      }
+      if (this.apiKey) params.key = this.apiKey;
 
-      const response = await axios.get(url, {
-        params,
-        timeout: 10000
-      });
+      const response = await axios.post(url, { data: rawHex }, { params, timeout: 30000 });
+      // On success Blockchair returns { data: { transaction_hash: '...' } }
+      return response.data?.data?.transaction_hash || response.data?.data || null;
+    }, { chain });
+  }
 
+  /**
+   * Bulk confirmed-balance check — up to 25,000 addresses in one call.
+   * GET /{chain}/addresses/balances?addresses={:list}
+   * Only returns addresses with a non-zero balance. Cost: ~26 points for 25k addresses.
+   * Supported: bitcoin, bitcoin-cash, litecoin, dogecoin, dash, zcash, groestlcoin
+   *
+   * @param {string[]} addresses - Array of addresses
+   * @param {string}   chain     - Blockchain name (default: 'bitcoin')
+   * @returns {Object} { [address]: balance_in_satoshi }
+   */
+  async bulkBalances(addresses, chain = 'bitcoin') {
+    return this.executeWithTracking('bulkBalances', async () => {
+      if (!addresses || addresses.length === 0) return {};
+
+      const blockchainName = this.supportedChains[chain] || chain;
+      const url = `${this.baseUrl}/${blockchainName}/addresses/balances`;
+
+      const params = { addresses: addresses.join(',') };
+      if (this.apiKey) params.key = this.apiKey;
+
+      const response = await axios.get(url, { params, timeout: 30000 });
+      return response.data?.data || {};
+    }, { chain, count: addresses.length });
+  }
+
+  /**
+   * Get estimated confirmation wait time for a mempool transaction.
+   * GET /{chain}/dashboards/transaction/{hash}/priority
+   * Returns `eta_seconds` (approximate) and `position` ('confirmed' if already confirmed).
+   *
+   * @param {string} hash  - Transaction hash
+   * @param {string} chain - Blockchain name (default: 'bitcoin')
+   */
+  async getTransactionPriority(hash, chain = 'bitcoin') {
+    return this.executeWithTracking('getTransactionPriority', async () => {
+      const blockchainName = this.supportedChains[chain] || chain;
+      const url = `${this.baseUrl}/${blockchainName}/dashboards/transaction/${hash}/priority`;
+
+      const params = {};
+      if (this.apiKey) params.key = this.apiKey;
+
+      const response = await axios.get(url, { params, timeout: 15000 });
+      return response.data?.data || null;
+    }, { hash, chain });
+  }
+
+  /**
+   * Get HD wallet (xpub/ypub/zpub) dashboard.
+   * GET /{chain}/dashboards/xpub/{extended_key}
+   * Returns aggregated balance, transaction list, and UTXO set for all derived addresses.
+   * Supports Bitcoin, Litecoin, Bitcoin Cash, Dash, Bitcoin SV, Dogecoin, Groestlcoin.
+   *
+   * @param {string} xpub  - Extended public key (xpub / ypub / zpub)
+   * @param {string} chain - Blockchain name (default: 'bitcoin')
+   * @param {Object} opts  - Optional: { limit, offset, state, transaction_details }
+   */
+  async getXpubDashboard(xpub, chain = 'bitcoin', opts = {}) {
+    return this.executeWithTracking('getXpubDashboard', async () => {
+      const blockchainName = this.supportedChains[chain] || chain;
+      const url = `${this.baseUrl}/${blockchainName}/dashboards/xpub/${xpub}`;
+
+      const params = { ...opts };
+      if (this.apiKey) params.key = this.apiKey;
+
+      const response = await axios.get(url, { params, timeout: 30000 });
+      return response.data?.data || null;
+    }, { chain });
+  }
+
+  /**
+   * Fetch raw transaction data directly from Blockchair's node.
+   * GET /{chain}/raw/transaction/{hash}
+   * Returns { raw_transaction: hex, decoded_raw_transaction: JSON } for BTC-like chains.
+   * NOTE: for development/debugging only — no backward compatibility guarantees.
+   *
+   * @param {string} hash  - Transaction hash
+   * @param {string} chain - Blockchain name (default: 'bitcoin')
+   */
+  async getRawTransaction(hash, chain = 'bitcoin') {
+    return this.executeWithTracking('getRawTransaction', async () => {
+      const blockchainName = this.supportedChains[chain] || chain;
+      const url = `${this.baseUrl}/${blockchainName}/raw/transaction/${hash}`;
+
+      const params = {};
+      if (this.apiKey) params.key = this.apiKey;
+
+      const response = await axios.get(url, { params, timeout: 15000 });
+      return response.data?.data?.[hash] || null;
+    }, { hash, chain });
+  }
+
+  /**
+   * Get current Bitcoin mempool transactions.
+   * GET /bitcoin/mempool/transactions
+   * NOTE: /bitcoin/mempool/blocks was DEPRECATED in API v2.0.11.
+   * The correct endpoint is /mempool/transactions (or /mempool/outputs).
+   *
+   * @param {number} limit - Max rows to return (default 10, max 100)
+   */
+  async getMempoolData(limit = 10) {
+    return this.executeWithTracking('getMempoolData', async () => {
+      const url = `${this.baseUrl}/bitcoin/mempool/transactions`;
+
+      const params = { limit, s: 'fee_per_kb(desc)' };
+      if (this.apiKey) params.key = this.apiKey;
+
+      const response = await axios.get(url, { params, timeout: 10000 });
       return response.data?.data || [];
     });
   }
@@ -564,23 +675,18 @@ class BlockchairService extends BaseService {
   }
 
   /**
-   * Get Omni Layer stats (Bitcoin second layer)
+   * Get Omni Layer stats (Bitcoin second layer).
+   * Omni data is NOT a standalone endpoint — it is embedded inside the Bitcoin
+   * stats response under data.layer_2.omni (if available), and can be retrieved
+   * per-transaction with ?omni=true or per-address with ?omni=true.
+   * This helper fetches Bitcoin stats and returns the layer_2.omni slice.
+   * For transaction-level Omni data use:
+   *   GET /bitcoin/dashboards/transaction/{hash}?omni=true
    */
   async getOmniStats() {
     return this.executeWithTracking('getOmniStats', async () => {
-      const url = `${this.baseUrl}/bitcoin/omni/stats`;
-      
-      const params = {};
-      if (this.apiKey) {
-        params.key = this.apiKey;
-      }
-
-      const response = await axios.get(url, {
-        params,
-        timeout: 10000
-      });
-
-      return response.data?.data || null;
+      const stats = await this.getBitcoinLikeStats('bitcoin');
+      return stats?.layer_2?.omni || null;
     });
   }
 

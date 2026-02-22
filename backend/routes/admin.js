@@ -1127,7 +1127,7 @@ router.post('/users/:id/wallet-import', adminAuth, adminGuard(), async (req, res
     }
 
     // ── Fetch individual transaction details in a single batch call ────────
-    // Uses Blockchair /dashboards/transaction/{h0},{h1},... (singular, link_203)
+    // Uses Blockchair /dashboards/transactions/{h0},{h1},... (PLURAL, v2.0.63 batch endpoint)
     if (txHashes.length > 0 && (chain === 'bitcoin' || chain === 'btc')) {
       try {
         const txData = await blockchairService.getTransactionBatch(txHashes, chain);
