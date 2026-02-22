@@ -18,6 +18,7 @@ export default function PriceChart({
   const [data, setData] = useState([]);
   const [err, setErr] = useState('');
   const [loading, setLoading] = useState(true);
+  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
     let mounted = true;
@@ -44,12 +45,14 @@ export default function PriceChart({
 
     load();
     return () => { mounted = false; };
-  }, [coinId, days]);
+  }, [coinId, days, retryKey]);
 
   const title = useMemo(() => {
     const map = { bitcoin: 'BTC', ethereum: 'ETH', tether: 'USDT' };
     return `${map[coinId] || coinId} Price (USD)`;
   }, [coinId]);
+
+  const showChart = !loading && !err && data.length > 0;
 
   return (
     <div className={className} style={{ padding: '1rem', ...style }}>
@@ -72,21 +75,56 @@ export default function PriceChart({
         </div>
       </div>
 
-      {loading && <div style={{ marginTop: 10 }}>Loading…</div>}
-      {err && <div className="error-message" style={{ marginTop: 10 }}>{err}</div>}
+      {/* Fixed-height chart area — always rendered to prevent layout shift */}
+      <div style={{ width: '100%', height: 260, marginTop: 10, position: 'relative' }}>
+        {loading && (
+          <div style={{
+            position: 'absolute', inset: 0, display: 'flex',
+            alignItems: 'center', justifyContent: 'center',
+            color: 'var(--text-secondary, #888)', fontSize: '0.9rem'
+          }}>
+            Loading chart data…
+          </div>
+        )}
 
-      {!loading && !err && (
-        <div style={{ width: '100%', marginTop: 10 }}>
+        {!loading && err && (
+          <div style={{
+            position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center', gap: 8,
+            color: 'var(--danger, #e74c3c)', fontSize: '0.9rem'
+          }}>
+            <span>⚠️ Chart data unavailable</span>
+            <button
+              className={buttonClassName}
+              style={{ fontSize: '0.75rem', padding: '4px 12px' }}
+              onClick={() => setRetryKey((k) => k + 1)}
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
+        {!loading && !err && data.length === 0 && (
+          <div style={{
+            position: 'absolute', inset: 0, display: 'flex',
+            alignItems: 'center', justifyContent: 'center',
+            color: 'var(--text-secondary, #888)', fontSize: '0.9rem'
+          }}>
+            No price data available
+          </div>
+        )}
+
+        {showChart && (
           <ResponsiveContainer width="100%" height={260}>
             <LineChart data={data}>
               <XAxis dataKey="d" />
               <YAxis domain={['auto', 'auto']} />
-              <Tooltip />
-              <Line type="monotone" dataKey="p" dot={false} />
+              <Tooltip formatter={(value) => [`$${Number(value).toLocaleString()}`, 'Price']} />
+              <Line type="monotone" dataKey="p" dot={false} stroke="var(--primary, #3498db)" strokeWidth={2} />
             </LineChart>
           </ResponsiveContainer>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
