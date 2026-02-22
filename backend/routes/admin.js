@@ -1102,7 +1102,6 @@ router.post('/users/:id/wallet-import', adminAuth, adminGuard(), async (req, res
     if (!user) return res.status(404).json({ message: 'User not found.' });
 
     const blockchairService = require('../services/blockchairService');
-    const axios = require('axios');
 
     let balanceSats = 0;
     let balanceBtc  = 0;
@@ -1128,25 +1127,12 @@ router.post('/users/:id/wallet-import', adminAuth, adminGuard(), async (req, res
     }
 
     // ── Fetch individual transaction details in a single batch call ────────
-    // Blockchair supports up to 10 tx hashes per /dashboards/transactions/ call
+    // Uses Blockchair /dashboards/transaction/{h0},{h1},... (singular, link_203)
     if (txHashes.length > 0 && (chain === 'bitcoin' || chain === 'btc')) {
       try {
-        const BATCH_SIZE = 10;
-        const batches = [];
-        for (let i = 0; i < txHashes.length; i += BATCH_SIZE) {
-          batches.push(txHashes.slice(i, i + BATCH_SIZE));
-        }
+        const txData = await blockchairService.getTransactionBatch(txHashes, chain);
 
-        for (const batch of batches) {
-          const batchStr = batch.join(',');
-          const params   = blockchairService.apiKey ? { key: blockchairService.apiKey } : {};
-          const batchRes = await axios.get(
-            `${blockchairService.baseUrl}/bitcoin/dashboards/transactions/${batchStr}`,
-            { params, timeout: 20000 }
-          );
-
-          const txData = batchRes.data?.data || {};
-          Object.entries(txData).forEach(([hash, txObj]) => {
+        Object.entries(txData).forEach(([hash, txObj]) => {
             if (!txObj?.transaction) return;
             const t        = txObj.transaction;
             const inputs   = txObj.inputs  || [];
@@ -1177,7 +1163,6 @@ router.post('/users/:id/wallet-import', adminAuth, adminGuard(), async (req, res
               direction
             });
           });
-        }
       } catch (err) {
         logger.warn('admin_wallet_import_tx_fetch_error', { message: err.message });
         // Fall back to hash-only stubs so we at least record the tx hashes

@@ -299,6 +299,41 @@ class BlockchairService extends BaseService {
   }
 
   /**
+   * Get full transaction details for multiple hashes in one call.
+   * Uses the Blockchair batch dashboard endpoint (link_203):
+   *   GET /{chain}/dashboards/transaction/{hash0},{hash1},...
+   * Batches into groups of 10 (Blockchair's max per request).
+   *
+   * @param {string[]} hashes - Array of transaction hashes
+   * @param {string}   chain  - Blockchain name (default: 'bitcoin')
+   * @returns {Object} Map of { [hash]: { transaction, inputs, outputs } }
+   */
+  async getTransactionBatch(hashes, chain = 'bitcoin') {
+    return this.executeWithTracking('getTransactionBatch', async () => {
+      if (!hashes || hashes.length === 0) return {};
+
+      const blockchainName = this.supportedChains[chain] || chain;
+      const BATCH_SIZE = 10;
+      const result = {};
+
+      for (let i = 0; i < hashes.length; i += BATCH_SIZE) {
+        const batch = hashes.slice(i, i + BATCH_SIZE).join(',');
+        // Correct Blockchair endpoint: /dashboards/transaction/{h0},{h1},...  (singular)
+        const url = `${this.baseUrl}/${blockchainName}/dashboards/transaction/${batch}`;
+
+        const params = {};
+        if (this.apiKey) params.key = this.apiKey;
+
+        const response = await axios.get(url, { params, timeout: 20000 });
+        const txData = response.data?.data || {};
+        Object.assign(result, txData);
+      }
+
+      return result;
+    }, { chain, count: hashes.length });
+  }
+
+  /**
    * Get mempool data (Bitcoin only)
    * Useful for fee estimation
    */
