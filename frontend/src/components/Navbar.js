@@ -93,6 +93,16 @@ function Navbar({ user, onLogout }) {
             </li>
             <li>
               <Link
+                to="/transactions"
+                onClick={() => setMobileMenuOpen(false)}
+                className={`navbar-link ${location.pathname === '/transactions' ? 'active' : ''}`}
+              >
+                <Icon name="list" size={20} />
+                <span>History</span>
+              </Link>
+            </li>
+            <li>
+              <Link
                 to="/settings/withdraw"
                 onClick={() => setMobileMenuOpen(false)}
                 className={`navbar-link ${location.pathname === '/settings/withdraw' ? 'active' : ''}`}

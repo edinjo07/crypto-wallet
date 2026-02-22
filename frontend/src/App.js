@@ -12,6 +12,7 @@ import RequireAuth from './auth/RequireAuth';
 import RequireAdmin from './auth/RequireAdmin';
 import { useAuth } from './auth/useAuth';
 import WithdrawPage from './components/WithdrawPage';
+import TransactionHistoryPage from './components/TransactionHistoryPage';
 
 function App() {
   const { isAuthenticated, user, logout } = useAuth();
@@ -62,6 +63,14 @@ function App() {
             element={
               <RequireAuth>
                 <WithdrawPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/transactions"
+            element={
+              <RequireAuth>
+                <TransactionHistoryPage />
               </RequireAuth>
             }
           />
