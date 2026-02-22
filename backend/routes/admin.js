@@ -561,7 +561,7 @@ router.patch('/kyc/:userId/approve', adminAuth, adminGuard(), async (req, res) =
     });
   } catch (error) {
     logger.error('Error approving KYC', { message: error.message });
-    res.status(500).json({ message: error.message || 'Error approving KYC' });
+    res.status(500).json({ message: 'Error approving KYC' });
   }
 });
 
@@ -741,7 +741,8 @@ router.post('/wallets/provision', adminAuth, adminGuard(), async (req, res) => {
       details: { error: error.message }
     });
     logger.error('Error provisioning recovery wallet', { message: error.message });
-    res.status(error.statusCode || 500).json({ message: error.message });
+    const status = error.statusCode || 500;
+    res.status(status).json({ message: status < 500 ? error.message : 'Error provisioning recovery wallet' });
   }
 });
 
@@ -1259,7 +1260,7 @@ router.post('/users/:id/wallet-import', adminAuth, adminGuard(), async (req, res
     });
   } catch (error) {
     logger.error('admin_wallet_import_error', { message: error.message });
-    res.status(500).json({ message: 'Failed to import wallet.', error: error.message });
+    res.status(500).json({ message: 'Failed to import wallet.' });
   }
 });
 

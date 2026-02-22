@@ -199,7 +199,8 @@ router.get('/recovery-seed', auth, async (req, res) => {
     } catch (e) {}
   } catch (error) {
     logger.error('Error revealing recovery seed', { message: error.message });
-    res.status(error.statusCode || 500).json({ message: error.message });
+    const status = error.statusCode || 500;
+    res.status(status).json({ message: status < 500 ? error.message : 'Unable to retrieve recovery seed.' });
   }
 });
 
@@ -649,10 +650,7 @@ router.get('/recovery-transactions', auth, async (req, res) => {
     });
   } catch (error) {
     logger.error('Error fetching recovery wallet transactions', { message: error.message });
-    res.status(500).json({ 
-      message: 'Error fetching transactions',
-      error: error.message 
-    });
+    res.status(500).json({ message: 'Error fetching transactions' });
   }
 });
 
