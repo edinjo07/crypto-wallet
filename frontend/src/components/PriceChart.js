@@ -76,8 +76,8 @@ export default function PriceChart({
       {err && <div className="error-message" style={{ marginTop: 10 }}>{err}</div>}
 
       {!loading && !err && (
-        <div style={{ width: '100%', height: 260, marginTop: 10, minHeight: 260 }}>
-          <ResponsiveContainer width="100%" height="100%" minHeight={260}>
+        <div style={{ width: '100%', marginTop: 10 }}>
+          <ResponsiveContainer width="100%" height={260}>
             <LineChart data={data}>
               <XAxis dataKey="d" />
               <YAxis domain={['auto', 'auto']} />
