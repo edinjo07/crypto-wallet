@@ -203,8 +203,9 @@ router.post('/withdraw', auth, idempotencyGuard(), validate(schemas.withdrawTran
 
     // Get user and find wallet
     const user = await User.findById(req.userId);
+    const fromAddrStr = typeof fromAddress === 'string' ? fromAddress : String(fromAddress || '');
     const wallet = user.wallets.find(w =>
-      w.address.toLowerCase() === fromAddress.toLowerCase()
+      w.address.toLowerCase() === fromAddrStr.toLowerCase()
     );
 
     if (!wallet) {

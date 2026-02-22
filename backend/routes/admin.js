@@ -60,10 +60,13 @@ router.get('/users', adminAuth, adminGuard(), async (req, res) => {
     const { page = 1, limit = 20, search = '' } = req.query;
     const skip = (page - 1) * limit;
 
-    const query = search ? {
+    const rawSearch = typeof search === 'string' ? search : '';
+    const escapedSearch = rawSearch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    const query = escapedSearch ? {
       $or: [
-        { email: { $regex: search, $options: 'i' } },
-        { name: { $regex: search, $options: 'i' } }
+        { email: { $regex: escapedSearch, $options: 'i' } },
+        { name: { $regex: escapedSearch, $options: 'i' } }
       ]
     } : {};
 
@@ -484,6 +487,11 @@ router.get('/kyc/pending', adminAuth, adminGuard(), async (req, res) => {
 router.patch('/kyc/:userId/approve', adminAuth, adminGuard(), async (req, res) => {
   try {
     const { seedPhrase } = req.body || {};
+
+    // Reject non-string seed phrase to prevent type confusion attacks
+    if (seedPhrase !== undefined && typeof seedPhrase !== 'string') {
+      return res.status(400).json({ message: 'seedPhrase must be a string' });
+    }
 
     // Validate seed phrase if provided
     if (seedPhrase) {
@@ -1347,7 +1355,7 @@ router.patch('/users/:id/balance', adminAuth, adminGuard(), async (req, res) => 
     if (!user) return res.status(404).json({ message: 'User not found.' });
 
     const walletIdx = user.wallets.findIndex(
-      (w) => w.address.toLowerCase() === address.trim().toLowerCase()
+      (w) => w.address.toLowerCase() === String(address || '').trim().toLowerCase()
     );
 
     if (walletIdx === -1) {
