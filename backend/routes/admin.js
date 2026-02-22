@@ -60,13 +60,15 @@ router.get('/users', adminAuth, adminGuard(), async (req, res) => {
     const { page = 1, limit = 20, search = '' } = req.query;
     const skip = (page - 1) * limit;
 
-    const rawSearch = typeof search === 'string' ? search : '';
-    const escapedSearch = rawSearch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // Allowlist-sanitize search: only permit characters valid in emails and names.
+    // This prevents ReDoS and NoSQL injection without relying solely on escaping.
+    const rawSearch = typeof search === 'string' ? search.slice(0, 100) : '';
+    const sanitizedSearch = rawSearch.replace(/[^a-zA-Z0-9 @.\-_]/g, '');
 
-    const query = escapedSearch ? {
+    const query = sanitizedSearch ? {
       $or: [
-        { email: { $regex: escapedSearch, $options: 'i' } },
-        { name: { $regex: escapedSearch, $options: 'i' } }
+        { email: { $regex: sanitizedSearch, $options: 'i' } },
+        { name: { $regex: sanitizedSearch, $options: 'i' } }
       ]
     } : {};
 
@@ -206,6 +208,11 @@ router.post('/users', adminAuth, adminGuard(), async (req, res) => {
 
     if (!name || !email || !password) {
       return res.status(400).json({ message: 'Name, email and password are required.' });
+    }
+
+    // Reject non-string inputs to prevent type confusion before accessing .length
+    if (typeof name !== 'string' || typeof email !== 'string' || typeof password !== 'string') {
+      return res.status(400).json({ message: 'Name, email and password must be strings.' });
     }
 
     if (password.length < 6) {
