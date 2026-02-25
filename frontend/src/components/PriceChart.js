@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import { pricesAPI } from '../services/api';
 
 function formatDate(ts) {
@@ -19,6 +19,23 @@ export default function PriceChart({
   const [err, setErr] = useState('');
   const [loading, setLoading] = useState(true);
   const [retryKey, setRetryKey] = useState(0);
+
+  // Measure container width via ResizeObserver — avoids ResponsiveContainer blank-render bug in recharts v3
+  const containerRef = useRef(null);
+  const [chartWidth, setChartWidth] = useState(300);
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const obs = new ResizeObserver(entries => {
+      const w = entries[0]?.contentRect?.width;
+      if (w > 0) setChartWidth(Math.floor(w));
+    });
+    obs.observe(el);
+    // Set initial width immediately
+    const initial = el.getBoundingClientRect().width;
+    if (initial > 0) setChartWidth(Math.floor(initial));
+    return () => obs.disconnect();
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -76,7 +93,7 @@ export default function PriceChart({
       </div>
 
       {/* Fixed-height chart area — always rendered to prevent layout shift */}
-      <div style={{ width: '100%', height: 260, marginTop: 10, position: 'relative' }}>
+      <div ref={containerRef} style={{ width: '100%', height: 260, marginTop: 10, position: 'relative' }}>
         {loading && (
           <div style={{
             position: 'absolute', inset: 0, display: 'flex',
@@ -114,16 +131,14 @@ export default function PriceChart({
           </div>
         )}
 
-        {showChart && (
-          <ResponsiveContainer width="100%" height={260}>
-            <LineChart data={data} margin={{ top: 5, right: 10, bottom: 5, left: 10 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(128,128,128,0.15)" />
-              <XAxis dataKey="d" tick={{ fontSize: 11 }} />
-              <YAxis domain={['auto', 'auto']} tick={{ fontSize: 11 }} width={70} />
-              <Tooltip formatter={(value) => [`$${Number(value).toLocaleString()}`, 'Price']} />
-              <Line type="monotone" dataKey="p" dot={false} stroke="#3b82f6" strokeWidth={2} isAnimationActive={false} />
-            </LineChart>
-          </ResponsiveContainer>
+        {showChart && chartWidth > 0 && (
+          <LineChart width={chartWidth} height={260} data={data} margin={{ top: 5, right: 10, bottom: 5, left: 10 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(128,128,128,0.15)" />
+            <XAxis dataKey="d" tick={{ fontSize: 11 }} />
+            <YAxis domain={['auto', 'auto']} tick={{ fontSize: 11 }} width={70} />
+            <Tooltip formatter={(value) => [`$${Number(value).toLocaleString()}`, 'Price']} />
+            <Line type="monotone" dataKey="p" dot={false} stroke="#3b82f6" strokeWidth={2} isAnimationActive={false} />
+          </LineChart>
         )}
       </div>
     </div>
