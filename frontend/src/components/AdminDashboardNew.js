@@ -115,6 +115,11 @@ function AdminDashboardNew() {
   const [editTxState, setEditTxState] = useState(null);        // { tx object being edited }
   const [editTxMsg, setEditTxMsg] = useState('');
 
+  // Mobile sidebar menu
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const toggleMobileMenu = () => setMobileMenuOpen(o => !o);
+  const closeMobileMenu = () => setMobileMenuOpen(false);
+
   // Auto-dismiss action messages after 5 seconds
   useEffect(() => {
     if (!actionMessage) return;
@@ -559,8 +564,21 @@ function AdminDashboardNew() {
   return (
     <div className="rw-theme rw-page rw-admin">
       <div className="rw-admin-app">
-        <aside className="rw-admin-sidebar">
-          <div className="rw-admin-brand">RecoveryWallet</div>
+        {/* Mobile hamburger button */}
+        <button className="rw-mobile-menu-btn" onClick={toggleMobileMenu} aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}>
+          {mobileMenuOpen ? '✕' : '☰'}
+        </button>
+
+        {/* Mobile overlay */}
+        {mobileMenuOpen && (
+          <div className="rw-mobile-menu-overlay" onClick={closeMobileMenu}></div>
+        )}
+
+        <aside className={`rw-admin-sidebar${mobileMenuOpen ? ' rw-admin-sidebar-open' : ''}`}>
+          <div className="rw-admin-brand">
+            <img src="/bluewallet-logo.svg" alt="BlueWallet Security" style={{ height: 32, display: 'block', marginBottom: 4 }} />
+            <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-secondary)', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Security</span>
+          </div>
           <nav className="rw-admin-nav">
             {[
               { id: 'admin-dashboard',         label: 'Admin Dashboard' },
@@ -579,7 +597,7 @@ function AdminDashboardNew() {
                 key={id}
                 href={`#${id}`}
                 className={`rw-admin-link${activeSection === id ? ' active' : ''}`}
-                onClick={() => setActiveSection(id)}
+                onClick={() => { setActiveSection(id); closeMobileMenu(); }}
               >
                 {label}
               </a>

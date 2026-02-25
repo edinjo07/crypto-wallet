@@ -51,14 +51,16 @@ function Register() {
       <div className="auth-card">
         <div className="auth-header" style={{ animation: 'fadeInUp 0.5s ease-out' }}>
           <div className="auth-logo" style={{ 
-            animation: 'bounce 2s ease-in-out infinite',
             display: 'flex',
-            justifyContent: 'center'
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 8
           }}>
-            <Icon name="wallet" size={64} color="#60B5FF" />
+            <img src="/bluewallet-logo.svg" alt="BlueWallet Security" style={{ height: 44, marginBottom: 4 }} />
+            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', letterSpacing: '1.5px', textTransform: 'uppercase' }}>Security</span>
           </div>
           <h2 className="auth-title">Create Account</h2>
-          <p className="auth-subtitle">Start managing your crypto securely</p>
+          <p className="auth-subtitle">Start managing your crypto with BlueWallet Security</p>
         </div>
         
         {error && (

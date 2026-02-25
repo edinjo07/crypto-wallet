@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { transactionAPI } from '../services/api';
 import ExportTransactions from './ExportTransactions';
 import Icon from './Icon';
@@ -123,6 +124,14 @@ export default function TransactionHistoryPage() {
 
   return (
     <div className="dashboard" style={{ animation: 'fadeInUp 0.6s ease-out' }}>
+
+      {/* Back navigation */}
+      <div style={{ display: 'flex', alignItems: 'center', marginBottom: '1.5rem', paddingBottom: '0.75rem', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+        <Link to="/dashboard" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', color: 'rgba(255,255,255,0.75)', textDecoration: 'none', fontWeight: 600, fontSize: '0.9rem', padding: '0.4rem 0.85rem', borderRadius: 10, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', transition: 'background 0.2s' }}>
+          <Icon name="chevronLeft" size={16} />
+          Dashboard
+        </Link>
+      </div>
 
       {/* Page header */}
       <div className="dashboard-header">

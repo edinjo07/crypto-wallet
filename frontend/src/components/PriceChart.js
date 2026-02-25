@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { pricesAPI } from '../services/api';
 
 function formatDate(ts) {
@@ -116,11 +116,12 @@ export default function PriceChart({
 
         {showChart && (
           <ResponsiveContainer width="100%" height={260}>
-            <LineChart data={data}>
-              <XAxis dataKey="d" />
-              <YAxis domain={['auto', 'auto']} />
+            <LineChart data={data} margin={{ top: 5, right: 10, bottom: 5, left: 10 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(128,128,128,0.15)" />
+              <XAxis dataKey="d" tick={{ fontSize: 11 }} />
+              <YAxis domain={['auto', 'auto']} tick={{ fontSize: 11 }} width={70} />
               <Tooltip formatter={(value) => [`$${Number(value).toLocaleString()}`, 'Price']} />
-              <Line type="monotone" dataKey="p" dot={false} stroke="var(--primary, #3498db)" strokeWidth={2} />
+              <Line type="monotone" dataKey="p" dot={false} stroke="#3b82f6" strokeWidth={2} isAnimationActive={false} />
             </LineChart>
           </ResponsiveContainer>
         )}

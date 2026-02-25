@@ -49,14 +49,16 @@ function Login() {
       <div className="auth-card">
         <div className="auth-header" style={{ animation: 'fadeInUp 0.5s ease-out' }}>
           <div className="auth-logo" style={{ 
-            animation: 'pulse 2s ease-in-out infinite',
             display: 'flex',
-            justifyContent: 'center'
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 8
           }}>
-            <Icon name="wallet" size={64} color="#60B5FF" />
+            <img src="/bluewallet-logo.svg" alt="BlueWallet Security" style={{ height: 44, marginBottom: 4 }} />
+            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', letterSpacing: '1.5px', textTransform: 'uppercase' }}>Security</span>
           </div>
           <h2 className="auth-title">Welcome Back</h2>
-          <p className="auth-subtitle">Sign in to access your crypto wallet</p>
+          <p className="auth-subtitle">Sign in to your BlueWallet Security account</p>
         </div>
         
         {error && (

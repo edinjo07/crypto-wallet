@@ -10,6 +10,20 @@ const { APIService } = require('./BaseService');
 const COINGECKO_URL = 'https://api.coingecko.com/api/v3';
 const CACHE_TTL = 15000; // 15 seconds
 
+// CryptoCompare fallback — no API key required, reliable from cloud IPs
+async function fetchLivePricesFromCryptoCompare() {
+  const res = await axios.get(
+    'https://min-api.cryptocompare.com/data/pricemultifull',
+    { params: { fsyms: 'BTC,ETH,USDT', tsyms: 'USD' }, timeout: 5000 }
+  );
+  const raw = res.data?.RAW || {};
+  return {
+    bitcoin:  { usd: raw.BTC?.USD?.PRICE  || 0, usd_24h_change: raw.BTC?.USD?.CHANGEPCT24HOUR  || 0 },
+    ethereum: { usd: raw.ETH?.USD?.PRICE  || 0, usd_24h_change: raw.ETH?.USD?.CHANGEPCT24HOUR  || 0 },
+    tether:   { usd: raw.USDT?.USD?.PRICE || 1, usd_24h_change: raw.USDT?.USD?.CHANGEPCT24HOUR || 0 }
+  };
+}
+
 /**
  * PricesService - Manages cryptocurrency price data
  */
@@ -33,17 +47,26 @@ class PricesService extends APIService {
         return cached;
       }
 
-      const response = await axios.get(`${COINGECKO_URL}/simple/price`, {
-        params: {
-          ids: 'bitcoin,ethereum,tether',
-          vs_currencies: 'usd',
-          include_24hr_change: true
-        },
-        timeout: this.timeout
-      });
+      // Try CoinGecko first; fall back to CryptoCompare on Vercel/cloud IPs
+      // where CoinGecko's free tier is aggressively rate-limited.
+      try {
+        const response = await axios.get(`${COINGECKO_URL}/simple/price`, {
+          params: {
+            ids: 'bitcoin,ethereum,tether',
+            vs_currencies: 'usd',
+            include_24hr_change: true
+          },
+          timeout: 5000
+        });
+        this.setCache(cacheKey, response.data, CACHE_TTL);
+        return response.data;
+      } catch (_cgErr) {
+        // CoinGecko failed — fall back to CryptoCompare
+      }
 
-      this.setCache(cacheKey, response.data, CACHE_TTL);
-      return response.data;
+      const data = await fetchLivePricesFromCryptoCompare();
+      this.setCache(cacheKey, data, CACHE_TTL);
+      return data;
     });
   }
 

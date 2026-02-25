@@ -388,14 +388,23 @@ function Dashboard() {
         )}
 
         <aside className={`rw-sidebar ${mobileMenuOpen ? 'rw-sidebar-open' : ''}`}>
-          <div className="rw-brand">RecoveryWallet</div>
+          <div className="rw-brand">
+            <img
+              src="/bluewallet-logo.svg"
+              alt="BlueWallet Security"
+              style={{ height: 32, display: 'block', marginBottom: 4 }}
+            />
+            <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-secondary)', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Security</span>
+          </div>
           <nav className="rw-nav">
             <a href="#dashboard" className="rw-nav-link active" onClick={closeMobileMenu}>Dashboard</a>
+            <Link to="/transactions" className="rw-nav-link" onClick={closeMobileMenu}>Transaction History</Link>
+            <a href="#portfolio" className="rw-nav-link" onClick={closeMobileMenu}>Portfolio</a>
+            <a href="#charts" className="rw-nav-link" onClick={closeMobileMenu}>Price Charts</a>
+            <Link to="/settings/withdraw" className="rw-nav-link" onClick={closeMobileMenu}>Withdraw</Link>
             <button type="button" className="rw-nav-link" onClick={() => { handleRecover(); closeMobileMenu(); }}>
               Recover Wallet
             </button>
-            <a href="#portfolio" className="rw-nav-link" onClick={closeMobileMenu}>Portfolio</a>
-            <a href="#charts" className="rw-nav-link" onClick={closeMobileMenu}>Price Charts</a>
             <a href="#security" className="rw-nav-link" onClick={closeMobileMenu}>Security</a>
             <a href="#support" className="rw-nav-link" onClick={closeMobileMenu}>Support</a>
             {isAdmin && (

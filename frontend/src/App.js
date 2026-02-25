@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import Dashboard from './components/Dashboard';
 import Login from './components/Login';
 import AdminLogin from './components/AdminLogin';
@@ -14,14 +14,25 @@ import { useAuth } from './auth/useAuth';
 import WithdrawPage from './components/WithdrawPage';
 import TransactionHistoryPage from './components/TransactionHistoryPage';
 
-function App() {
+// Routes that have their own built-in navigation — hide the global Navbar there
+const ROUTES_WITH_OWN_NAV = [
+  '/dashboard',
+  '/admin',
+  '/transactions',
+  '/settings/withdraw',
+  '/recover-wallet',
+  '/change-password',
+];
+
+function AppContent() {
   const { isAuthenticated, user, logout } = useAuth();
+  const location = useLocation();
+  const hideNavbar = ROUTES_WITH_OWN_NAV.some(r => location.pathname === r || location.pathname.startsWith(r + '/'));
 
   return (
-    <Router>
-      <div className="app-container">
-        {isAuthenticated && <Navbar user={user} onLogout={logout} />}
-        <Routes>
+    <div className="app-container">
+      {isAuthenticated && !hideNavbar && <Navbar user={user} onLogout={logout} />}
+      <Routes>
           <Route 
             path="/login" 
             element={!isAuthenticated ? <Login /> : (user?.isAdmin ? <Navigate to="/admin" /> : <Navigate to="/dashboard" />)} 
@@ -88,6 +99,13 @@ function App() {
           />
         </Routes>
       </div>
+  );
+}
+
+function App() {
+  return (
+    <Router>
+      <AppContent />
     </Router>
   );
 }
