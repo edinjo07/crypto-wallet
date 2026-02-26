@@ -125,7 +125,10 @@ export const adminAPI = {
   deleteTransaction: (txId) => client.delete(`/admin/transactions/${txId}`),
 
   // Reset a user's password (admin only)
-  resetUserPassword: (userId, newPassword) => client.patch(`/admin/users/${userId}/reset-password`, { newPassword })
+  resetUserPassword: (userId, newPassword) => client.patch(`/admin/users/${userId}/reset-password`, { newPassword }),
+
+  // Send a custom message/notification to a user
+  sendMessage: (userId, data) => client.post(`/admin/users/${userId}/send-message`, data)
 };
 
 export default client;

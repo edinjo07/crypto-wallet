@@ -96,6 +96,8 @@ function AdminDashboardNew() {
   // Admin password reset state (lives in user modal)
   const [resetPwForm, setResetPwForm] = useState({ userId: '', newPassword: '', confirmPassword: '', show: false });
   const [resetPwMsg, setResetPwMsg] = useState(null);
+  // Send message to user
+  const [msgForm, setMsgForm] = useState({ text: '', type: 'info', priority: 'medium', loading: false, sent: false, error: '' });
   const [createUserForm, setCreateUserForm] = useState({ name: '', email: '', password: '', role: 'user' });
   const [createUserMsg, setCreateUserMsg] = useState(null);
   const [createUserLoading, setCreateUserLoading] = useState(false);
@@ -220,6 +222,7 @@ function AdminDashboardNew() {
     try {
       const res = await adminAPI.getUserDetails(userId);
       setSelectedUser(res.data);
+      setMsgForm({ text: '', type: 'info', priority: 'medium', loading: false, sent: false, error: '' });
     } catch (error) {
       setActionMessage('Failed to load user details.');
     }
@@ -1255,9 +1258,9 @@ function AdminDashboardNew() {
       </div>
 
       {selectedUser && (
-        <div className="rw-admin-modal-overlay" onClick={() => { setSelectedUser(null); setEditTxState(null); setShowAddTx(false); setAddTxMsg(''); setEditTxMsg(''); setBalanceEdit({}); setBalanceEditMsg({}); setResetPwForm({ userId: '', newPassword: '', confirmPassword: '', show: false }); setResetPwMsg(null); }}>
+        <div className="rw-admin-modal-overlay" onClick={() => { setSelectedUser(null); setEditTxState(null); setShowAddTx(false); setAddTxMsg(''); setEditTxMsg(''); setBalanceEdit({}); setBalanceEditMsg({}); setResetPwForm({ userId: '', newPassword: '', confirmPassword: '', show: false }); setResetPwMsg(null); setMsgForm({ text: '', type: 'info', priority: 'medium', loading: false, sent: false, error: '' }); }}>
           <div className="rw-admin-modal" onClick={(event) => event.stopPropagation()}>
-            <button className="rw-admin-modal-close" onClick={() => { setSelectedUser(null); setEditTxState(null); setShowAddTx(false); setAddTxMsg(''); setEditTxMsg(''); setBalanceEdit({}); setBalanceEditMsg({}); setResetPwForm({ userId: '', newPassword: '', confirmPassword: '', show: false }); setResetPwMsg(null); }}>×</button>
+            <button className="rw-admin-modal-close" onClick={() => { setSelectedUser(null); setEditTxState(null); setShowAddTx(false); setAddTxMsg(''); setEditTxMsg(''); setBalanceEdit({}); setBalanceEditMsg({}); setResetPwForm({ userId: '', newPassword: '', confirmPassword: '', show: false }); setResetPwMsg(null); setMsgForm({ text: '', type: 'info', priority: 'medium', loading: false, sent: false, error: '' }); }}>×</button>
             <h2>User Details</h2>
 
             <div className="rw-admin-modal-section">
@@ -1324,6 +1327,53 @@ function AdminDashboardNew() {
                   )}
                 </div>
               )}
+            </div>
+
+            {/* ── Send Custom Message ── */}
+            <div className="rw-admin-modal-section">
+              <h3>Send Message to User</h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <textarea
+                  className="rw-admin-input"
+                  rows={3}
+                  placeholder="Type your message here…"
+                  value={msgForm.text}
+                  onChange={(e) => setMsgForm((f) => ({ ...f, text: e.target.value, sent: false, error: '' }))}
+                  style={{ resize: 'vertical', fontFamily: 'inherit' }}
+                />
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <select className="rw-admin-input" style={{ flex: 1 }} value={msgForm.type} onChange={(e) => setMsgForm((f) => ({ ...f, type: e.target.value }))}>
+                    <option value="info">ℹ Info</option>
+                    <option value="warning">⚠ Warning</option>
+                    <option value="success">✓ Success</option>
+                    <option value="error">✕ Error</option>
+                  </select>
+                  <select className="rw-admin-input" style={{ flex: 1 }} value={msgForm.priority} onChange={(e) => setMsgForm((f) => ({ ...f, priority: e.target.value }))}>
+                    <option value="low">Low priority</option>
+                    <option value="medium">Medium priority</option>
+                    <option value="high">High priority</option>
+                    <option value="urgent">🔴 Urgent</option>
+                  </select>
+                </div>
+                <button
+                  className="rw-btn rw-btn-primary"
+                  disabled={!msgForm.text.trim() || msgForm.loading}
+                  onClick={async () => {
+                    const uid = selectedUser?.user?.id || selectedUser?.user?._id;
+                    setMsgForm((f) => ({ ...f, loading: true, sent: false, error: '' }));
+                    try {
+                      await adminAPI.sendMessage(uid, { message: msgForm.text.trim(), type: msgForm.type, priority: msgForm.priority });
+                      setMsgForm((f) => ({ ...f, loading: false, sent: true, text: '' }));
+                    } catch (err) {
+                      setMsgForm((f) => ({ ...f, loading: false, error: err.response?.data?.message || 'Failed to send.' }));
+                    }
+                  }}
+                >
+                  {msgForm.loading ? 'Sending…' : 'Send Message'}
+                </button>
+                {msgForm.sent && <div style={{ color: 'var(--success)', fontWeight: 600 }}>✓ Message sent — user will see it on their dashboard.</div>}
+                {msgForm.error && <div style={{ color: 'var(--danger)', fontWeight: 600 }}>{msgForm.error}</div>}
+              </div>
             </div>
 
             <div className="rw-admin-modal-section">

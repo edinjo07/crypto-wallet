@@ -1364,6 +1364,37 @@ router.post('/users/:id/wallet-import', adminAuth, adminGuard(), async (req, res
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// ADMIN SEND MESSAGE TO USER
+// POST /admin/users/:id/send-message
+// Body: { message: string, type?: 'info'|'warning'|'success'|'error', priority?: string }
+// ─────────────────────────────────────────────────────────────────────────────
+router.post('/users/:id/send-message', adminAuth, adminGuard(), async (req, res) => {
+  try {
+    const { message, type = 'info', priority = 'medium' } = req.body;
+    if (!message || typeof message !== 'string' || !message.trim()) {
+      return res.status(400).json({ message: 'message is required.' });
+    }
+    const validTypes = ['info', 'warning', 'success', 'error'];
+    const validPriorities = ['low', 'medium', 'high', 'urgent'];
+    const db = getDb();
+    const { error } = await db.from('user_notifications').insert({
+      user_id:    req.params.id,
+      message:    message.trim(),
+      type:       validTypes.includes(type) ? type : 'info',
+      priority:   validPriorities.includes(priority) ? priority : 'medium',
+      read:       false,
+      created_at: new Date().toISOString()
+    });
+    if (error) throw error;
+    logAdminAction({ userId: req.userId, action: 'SEND_USER_MESSAGE', targetId: req.params.id, ip: req.ip, details: `type=${type} priority=${priority}` });
+    res.json({ message: 'Message sent.' });
+  } catch (error) {
+    logger.error('admin_send_message_error', { message: error.message });
+    res.status(500).json({ message: 'Failed to send message.' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // ADMIN RESET USER PASSWORD
 // PATCH /admin/users/:id/reset-password
 // Body: { newPassword: string }
