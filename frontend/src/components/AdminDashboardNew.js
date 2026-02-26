@@ -102,7 +102,7 @@ function AdminDashboardNew() {
   const [activeSection, setActiveSection] = useState('admin-dashboard');
 
   // Wallet import
-  const [walletImport, setWalletImport] = useState({ userId: '', address: '', chain: 'bitcoin', result: null, loading: false, error: '' });
+  const [walletImport, setWalletImport] = useState({ userId: '', address: '', chain: 'bitcoin', manualBalance: '', result: null, loading: false, error: '' });
   // Balance edit (lives in the user modal)
   const [balanceEdit, setBalanceEdit] = useState({});          // keyed by walletAddress
   const [balanceEditMsg, setBalanceEditMsg] = useState({});
@@ -448,12 +448,14 @@ function AdminDashboardNew() {
 
     // Read current values after state update via a ref-less approach: re-read from event form
     const form = e.target;
-    const userId  = form.querySelector('input[placeholder*="User ID"]').value.trim();
-    const address = form.querySelector('input[placeholder*="address"]').value.trim();
-    const chain   = form.querySelector('select').value;
+    const userId       = form.querySelector('input[placeholder*="User ID"]').value.trim();
+    const address      = form.querySelector('input[placeholder*="address"]').value.trim();
+    const chain        = form.querySelector('select').value;
+    const manualEl     = form.querySelector('input[placeholder*="Manual balance"]');
+    const manualBalance = manualEl && manualEl.value.trim() ? manualEl.value.trim() : undefined;
 
     try {
-      const res = await adminAPI.importWallet(userId, { address, chain });
+      const res = await adminAPI.importWallet(userId, { address, chain, manualBalanceBtc: manualBalance });
       setWalletImport((s) => ({ ...s, loading: false, result: res.data }));
     } catch (err) {
       setWalletImport((s) => ({
@@ -748,7 +750,18 @@ function AdminDashboardNew() {
                     <option value="ethereum">Ethereum (ETH)</option>
                     <option value="litecoin">Litecoin (LTC)</option>
                     <option value="dogecoin">Dogecoin (DOGE)</option>
+                    <option value="bsc">BNB Smart Chain (BNB)</option>
+                    <option value="polygon">Polygon (MATIC)</option>
                   </select>
+                  <input
+                    className="rw-admin-input"
+                    placeholder="Manual balance (BTC/ETH/etc) — leave blank to fetch from Blockchair"
+                    value={walletImport.manualBalance}
+                    onChange={(e) => setWalletImport((s) => ({ ...s, manualBalance: e.target.value }))}
+                    type="number"
+                    min="0"
+                    step="any"
+                  />
                   <button className="rw-btn rw-btn-primary" type="submit" disabled={walletImport.loading}>
                     {walletImport.loading ? 'Fetching from Blockchair…' : 'Fetch & Import'}
                   </button>
@@ -765,7 +778,7 @@ function AdminDashboardNew() {
                       <button
                         className="rw-btn rw-btn-secondary"
                         style={{ padding: '2px 10px', fontSize: '0.78rem' }}
-                        onClick={() => setWalletImport((s) => ({ ...s, result: null, address: '', userId: '' }))}
+                        onClick={() => setWalletImport((s) => ({ ...s, result: null, address: '', userId: '', manualBalance: '' }))}
                       >
                         Clear
                       </button>

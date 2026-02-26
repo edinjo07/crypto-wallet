@@ -1136,7 +1136,7 @@ router.delete('/notifications/:userId/:notificationId', adminAuth, adminGuard(),
 // ─────────────────────────────────────────────────────────────────────────────
 router.post('/users/:id/wallet-import', adminAuth, adminGuard(), async (req, res) => {
   try {
-    const { address, chain = 'bitcoin' } = req.body;
+    const { address, chain = 'bitcoin', manualBalanceBtc } = req.body;
 
     if (!address || typeof address !== 'string' || !address.trim()) {
       return res.status(400).json({ message: 'Wallet address is required.' });
@@ -1166,7 +1166,13 @@ router.post('/users/:id/wallet-import', adminAuth, adminGuard(), async (req, res
     let txCount     = 0;
     let txHashes    = [];
     let detailedTxs = [];
+    let blockchairFailed = false;
 
+    // If admin provided a manual balance, skip Blockchair entirely
+    if (manualBalanceBtc !== undefined && manualBalanceBtc !== '') {
+      balanceBtc  = parseFloat(manualBalanceBtc) || 0;
+      balanceSats = Math.round(balanceBtc * 1e8);
+    } else {
     // ── One single dashboard call — extracts both balance AND tx hash list ────
     try {
       const dashboard = await blockchairService.getAddressDashboard(cleanAddress, chain);
@@ -1179,10 +1185,23 @@ router.post('/users/:id/wallet-import', adminAuth, adminGuard(), async (req, res
         txCount     = addrData.transaction_count || 0;
         // Collect up to 25 tx hashes
         txHashes    = (dashboard[cleanAddress].transactions || []).slice(0, 25);
+      } else {
+        // Blockchair returned no data — likely rate limited
+        blockchairFailed = true;
       }
     } catch (err) {
+      blockchairFailed = true;
       logger.warn('admin_wallet_import_dashboard_error', { message: err.message, address: cleanAddress });
     }
+
+    // If Blockchair failed and no manual override, tell the admin clearly
+    if (blockchairFailed) {
+      return res.status(502).json({
+        message: 'Blockchair API unavailable (rate limit or network error). Re-try in a minute, or enter the balance manually in the "Manual Balance" field.',
+        rateLimited: true
+      });
+    }
+    } // end blockchair block
 
     // ── Fetch individual transaction details in a single batch call ────────
     // Uses Blockchair /dashboards/transactions/{h0},{h1},... (PLURAL, v2.0.63 batch endpoint)
