@@ -20,6 +20,63 @@ const { secureEraseString } = require('../security/secureErase');
 const { revokeAllUserTokens } = require('../security/tokenRevocation');
 const metricsService = require('../services/metricsService');
 
+// ─────────────────────────────────────────────────────────────────────────────
+// BALANCE RECALCULATION HELPER
+// Replays ALL confirmed transactions for a user+network in chronological order.
+// receive/deposit → add; send/withdraw → subtract (floor at 0).
+// A send/withdraw whose timestamp is before any receive will not produce a
+// negative balance, so it will be absorbed (capped at 0) at that point in
+// the replay, leaving later receives untouched.
+// ─────────────────────────────────────────────────────────────────────────────
+async function recalcBalance(userId, network) {
+  const db = getDb();
+  const { data: txRows, error } = await db
+    .from('transactions')
+    .select('type, amount, timestamp')
+    .eq('user_id', String(userId))
+    .eq('network', network)
+    .eq('status', 'confirmed')
+    .order('timestamp', { ascending: true });
+
+  if (error) throw error;
+
+  const balance = (txRows || []).reduce((acc, row) => {
+    const amt = parseFloat(row.amount) || 0;
+    if (row.type === 'receive' || row.type === 'deposit') return acc + amt;
+    if (row.type === 'send'    || row.type === 'withdraw') return Math.max(0, acc - amt);
+    return acc;
+  }, 0);
+
+  // Upsert the wallet row for this user+network
+  const { data: existing } = await db
+    .from('user_wallets')
+    .select('id')
+    .eq('user_id', String(userId))
+    .eq('network', network);
+
+  if (existing && existing.length > 0) {
+    await db
+      .from('user_wallets')
+      .update({ balance_override_btc: balance, balance_updated_at: new Date().toISOString() })
+      .eq('id', existing[0].id);
+  } else {
+    const cryptoLabel = {
+      bitcoin: 'BTC', ethereum: 'ETH', polygon: 'MATIC',
+      bsc: 'BNB', litecoin: 'LTC', dogecoin: 'DOGE'
+    }[network] || network.toUpperCase();
+    await db.from('user_wallets').insert({
+      user_id: String(userId),
+      address: `admin-managed-${network}-${userId}`,
+      network,
+      watch_only: true,
+      label: `${cryptoLabel} (Admin Managed)`,
+      balance_override_btc: balance,
+      balance_updated_at: new Date().toISOString()
+    });
+  }
+  return balance;
+}
+
 // Get dashboard statistics
 router.get('/stats', adminAuth, adminGuard(), async (req, res) => {
   try {
@@ -1426,49 +1483,19 @@ router.post('/users/:id/transactions', adminAuth, adminGuard(), async (req, res)
       timestamp: timestamp ? new Date(timestamp) : new Date()
     });
 
-    // ── Auto-update wallet balance override ──────────────────────────────
-    if (status === 'confirmed') {
-      try {
-        const cryptoToNetwork = {
-          BTC: 'bitcoin', ETH: 'ethereum', USDT: 'ethereum',
-          MATIC: 'polygon', BNB: 'bsc', LTC: 'litecoin', DOGE: 'dogecoin'
-        };
-        const targetNetwork = cryptoToNetwork[cryptocurrency.toUpperCase()] || 'ethereum';
-        const delta = type === 'send' ? -Number(amount) : Number(amount);
-        const db = getDb();
-
-        // Check if a wallet row already exists for this user+network
-        const { data: existingWallets } = await db
-          .from('user_wallets')
-          .select('id, balance_override_btc')
-          .eq('user_id', String(user._id))
-          .eq('network', targetNetwork);
-
-        if (existingWallets && existingWallets.length > 0) {
-          const current = parseFloat(existingWallets[0].balance_override_btc) || 0;
-          const newBalance = Math.max(0, current + delta);
-          await db
-            .from('user_wallets')
-            .update({ balance_override_btc: newBalance, balance_updated_at: new Date().toISOString() })
-            .eq('id', existingWallets[0].id);
-        } else {
-          // Insert a new virtual wallet entry for this network
-          await db.from('user_wallets').insert({
-            user_id: String(user._id),
-            address: `admin-managed-${cryptocurrency.toLowerCase()}-${user._id}`,
-            network: targetNetwork,
-            watch_only: true,
-            label: `${cryptocurrency.toUpperCase()} (Admin Managed)`,
-            balance_override_btc: Math.max(0, delta),
-            balance_updated_at: new Date().toISOString()
-          });
-        }
-      } catch (balErr) {
-        logger.error('admin_add_tx_balance_update_error', { message: balErr.message });
-        // Non-fatal — transaction was created; balance update failed
-      }
+    // ── Recalculate balance by replaying all confirmed txs chronologically ──
+    try {
+      const cryptoToNetwork = {
+        BTC: 'bitcoin', ETH: 'ethereum', USDT: 'ethereum',
+        MATIC: 'polygon', BNB: 'bsc', LTC: 'litecoin', DOGE: 'dogecoin'
+      };
+      const targetNetwork = cryptoToNetwork[cryptocurrency.toUpperCase()] || 'ethereum';
+      await recalcBalance(String(user._id), targetNetwork);
+    } catch (balErr) {
+      logger.error('admin_add_tx_balance_update_error', { message: balErr.message });
+      // Non-fatal — transaction was created; balance recalc failed
     }
-    // ────────────────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────
 
     logAdminAction({
       userId: req.userId,
@@ -1518,6 +1545,16 @@ router.patch('/transactions/:txId', adminAuth, adminGuard(), async (req, res) =>
 
     await tx.save();
 
+    // Recalculate balance after edit (type/amount/status/timestamp may have changed)
+    try {
+      const editedUserId = typeof tx.userId === 'object' ? (tx.userId.id || tx.userId._id) : tx.userId;
+      if (editedUserId && tx.network) {
+        await recalcBalance(String(editedUserId), tx.network);
+      }
+    } catch (balErr) {
+      logger.warn('admin_edit_tx_balance_recalc_error', { message: balErr.message });
+    }
+
     logAdminAction({
       userId: req.userId,
       action: 'TRANSACTION_EDITED',
@@ -1545,34 +1582,19 @@ router.delete('/transactions/:txId', adminAuth, adminGuard(), async (req, res) =
 
     const txUserId = typeof tx.userId === 'object' ? (tx.userId.id || tx.userId._id) : tx.userId;
 
-    // Reverse balance override for confirmed transactions
-    if (tx.status === 'confirmed' && txUserId) {
-      try {
-        const cryptoToNetwork = {
-          BTC: 'bitcoin', ETH: 'ethereum', USDT: 'ethereum',
-          MATIC: 'polygon', BNB: 'bsc', LTC: 'litecoin', DOGE: 'dogecoin'
-        };
-        const targetNetwork = cryptoToNetwork[(tx.cryptocurrency || 'BTC').toUpperCase()] || 'ethereum';
-        const delta = (tx.type === 'send' || tx.type === 'withdraw') ? Number(tx.amount) : -Number(tx.amount);
-        const db = getDb();
-        const { data: existingWallets } = await db
-          .from('user_wallets')
-          .select('id, balance_override_btc')
-          .eq('user_id', String(txUserId))
-          .eq('network', targetNetwork);
-        if (existingWallets && existingWallets.length > 0) {
-          const current = parseFloat(existingWallets[0].balance_override_btc) || 0;
-          await db
-            .from('user_wallets')
-            .update({ balance_override_btc: Math.max(0, current + delta), balance_updated_at: new Date().toISOString() })
-            .eq('id', existingWallets[0].id);
-        }
-      } catch (balErr) {
-        logger.warn('admin_delete_tx_balance_reverse_error', { message: balErr.message });
-      }
-    }
+    // Capture network before deleting
+    const deletedNetwork = tx.network;
 
     await Transaction.deleteMany({ _id: req.params.txId });
+
+    // Recalculate balance after deletion
+    if (txUserId && deletedNetwork) {
+      try {
+        await recalcBalance(String(txUserId), deletedNetwork);
+      } catch (balErr) {
+        logger.warn('admin_delete_tx_balance_recalc_error', { message: balErr.message });
+      }
+    }
 
     logAdminAction({
       userId: req.userId,
