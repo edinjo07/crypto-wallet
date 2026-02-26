@@ -74,6 +74,12 @@ function ChangePasswordPage() {
   return (
     <div className="rw-theme rw-page rw-recover">
       <div className="rw-recover-container" style={{ maxWidth: 500 }}>
+        <button
+          onClick={() => navigate('/dashboard')}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginBottom: '1rem', background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer', fontWeight: 600, fontSize: '0.9rem', padding: 0 }}
+        >
+          &#8592; Back to Dashboard
+        </button>
         <div className="rw-recover-header">
           <h1>Change Password</h1>
           <p className="rw-muted">Enter your current password and choose a new one.</p>

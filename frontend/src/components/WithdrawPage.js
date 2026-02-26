@@ -143,6 +143,12 @@ function WithdrawPage() {
   return (
     <div className="rw-theme rw-page rw-recover">
       <div className="rw-recover-container" style={{ maxWidth: 540 }}>
+        <button
+          onClick={() => navigate('/dashboard')}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginBottom: '1rem', background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer', fontWeight: 600, fontSize: '0.9rem', padding: 0 }}
+        >
+          &#8592; Back to Dashboard
+        </button>
 
         {/* Header */}
         <div className="rw-recover-header">

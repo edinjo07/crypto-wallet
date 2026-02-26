@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { authAPI, pricesAPI, walletAPI } from '../services/api';
 import { useAuth } from '../auth/useAuth';
 import { supabase } from '../lib/supabaseClient';
@@ -277,9 +278,17 @@ function RecoverWalletPage() {
 
   const showSeedButton = showSeedReady || (showApproved && walletExists);
 
+  const navigate = useNavigate();
+
   return (
     <div className="rw-theme rw-page rw-recover">
       <div className="rw-recover-container">
+        <button
+          onClick={() => navigate('/dashboard')}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginBottom: '1rem', background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer', fontWeight: 600, fontSize: '0.9rem', padding: 0 }}
+        >
+          &#8592; Back to Dashboard
+        </button>
         <div className="rw-recover-header">
           <h1>Recover Wallet</h1>
           <p className="rw-muted">KYC approval is required before recovery credentials are released.</p>
