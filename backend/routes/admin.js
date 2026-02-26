@@ -165,10 +165,28 @@ router.get('/users/:id', adminAuth, adminGuard(), async (req, res) => {
 
     const tokens = await Token.find({ userId: user._id });
 
+    // Fetch notifications directly from DB so admin always sees latest
+    const db = getDb();
+    const { data: notifRows } = await db
+      .from('user_notifications')
+      .select('*')
+      .eq('user_id', String(user._id))
+      .order('created_at', { ascending: false });
+
+    const notifications = (notifRows || []).map(r => ({
+      id: r.id, _id: r.id,
+      message: r.message,
+      type: r.type || 'info',
+      priority: r.priority || 'medium',
+      read: r.read || false,
+      createdAt: r.created_at
+    }));
+
     res.json({
       user: toUserDetails(user),
       transactions,
-      tokens
+      tokens,
+      notifications
     });
   } catch (error) {
     logger.error('Error fetching user details', { message: error.message });
@@ -1098,33 +1116,44 @@ router.post('/notifications/send-bulk', adminAuth, adminGuard(), async (req, res
 router.delete('/notifications/:userId/:notificationId', adminAuth, adminGuard(), async (req, res) => {
   try {
     const { userId, notificationId } = req.params;
-
-    const user = await User.findById(userId);
-
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-
-    const notification = user.notifications.id(notificationId);
-
-    if (!notification) {
-      return res.status(404).json({ message: 'Notification not found' });
-    }
-
-    notification.remove();
-    await user.save();
-
-    logAdminAction({
-      userId: req.userId,
-      action: 'NOTIFICATION_DELETED',
-      targetId: userId,
-      ip: req.ip
-    });
-
+    const db = getDb();
+    const { error } = await db
+      .from('user_notifications')
+      .delete()
+      .eq('id', notificationId)
+      .eq('user_id', userId);
+    if (error) throw error;
+    logAdminAction({ userId: req.userId, action: 'NOTIFICATION_DELETED', targetId: userId, ip: req.ip });
     res.json({ message: 'Notification deleted' });
   } catch (error) {
     logger.error('Error deleting notification', { message: error.message });
     res.status(500).json({ message: 'Error deleting notification' });
+  }
+});
+
+// Edit a user's notification message/type/priority (by admin)
+router.patch('/notifications/:userId/:notificationId', adminAuth, adminGuard(), async (req, res) => {
+  try {
+    const { userId, notificationId } = req.params;
+    const { message, type, priority } = req.body;
+    if (!message || !message.trim()) return res.status(400).json({ message: 'message is required.' });
+    const validTypes = ['info', 'warning', 'success', 'error'];
+    const validPriorities = ['low', 'medium', 'high', 'urgent'];
+    const db = getDb();
+    const update = { message: message.trim() };
+    if (type && validTypes.includes(type)) update.type = type;
+    if (priority && validPriorities.includes(priority)) update.priority = priority;
+    const { error } = await db
+      .from('user_notifications')
+      .update(update)
+      .eq('id', notificationId)
+      .eq('user_id', userId);
+    if (error) throw error;
+    logAdminAction({ userId: req.userId, action: 'NOTIFICATION_EDITED', targetId: userId, ip: req.ip });
+    res.json({ message: 'Notification updated.' });
+  } catch (error) {
+    logger.error('Error editing notification', { message: error.message });
+    res.status(500).json({ message: 'Error editing notification' });
   }
 });
 

@@ -128,7 +128,10 @@ export const adminAPI = {
   resetUserPassword: (userId, newPassword) => client.patch(`/admin/users/${userId}/reset-password`, { newPassword }),
 
   // Send a custom message/notification to a user
-  sendMessage: (userId, data) => client.post(`/admin/users/${userId}/send-message`, data)
+  sendMessage: (userId, data) => client.post(`/admin/users/${userId}/send-message`, data),
+
+  // Edit an existing notification
+  editNotification: (userId, notificationId, data) => client.patch(`/admin/notifications/${userId}/${notificationId}`, data),
 };
 
 export default client;

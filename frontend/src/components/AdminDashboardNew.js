@@ -98,6 +98,9 @@ function AdminDashboardNew() {
   const [resetPwMsg, setResetPwMsg] = useState(null);
   // Send message to user
   const [msgForm, setMsgForm] = useState({ text: '', type: 'info', priority: 'medium', loading: false, sent: false, error: '' });
+  // Edit existing notification
+  const [editingNotifId, setEditingNotifId] = useState(null);
+  const [editNotifForm, setEditNotifForm] = useState({ text: '', type: 'info', priority: 'medium' });
   const [createUserForm, setCreateUserForm] = useState({ name: '', email: '', password: '', role: 'user' });
   const [createUserMsg, setCreateUserMsg] = useState(null);
   const [createUserLoading, setCreateUserLoading] = useState(false);
@@ -1375,6 +1378,76 @@ function AdminDashboardNew() {
                 {msgForm.error && <div style={{ color: 'var(--danger)', fontWeight: 600 }}>{msgForm.error}</div>}
               </div>
             </div>
+
+            {/* ── Sent Messages (with edit/delete) ── */}
+            {selectedUser.notifications && selectedUser.notifications.length > 0 && (
+              <div className="rw-admin-modal-section">
+                <h3>Sent Messages ({selectedUser.notifications.length})</h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {selectedUser.notifications.map((n) => {
+                    const uid = selectedUser?.user?.id || selectedUser?.user?._id;
+                    const isEditing = editingNotifId === n.id;
+                    const typeColor = { info: '#4a9eff', warning: '#ff8800', success: '#22c55e', error: '#ef4444' }[n.type] || '#4a9eff';
+                    return (
+                      <div key={n.id} style={{ padding: '10px 12px', borderRadius: 8, border: `1px solid ${typeColor}40`, background: `${typeColor}08` }}>
+                        {isEditing ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                            <textarea
+                              className="rw-admin-input"
+                              rows={2}
+                              value={editNotifForm.text}
+                              onChange={(e) => setEditNotifForm((f) => ({ ...f, text: e.target.value }))}
+                              style={{ resize: 'vertical', fontFamily: 'inherit' }}
+                            />
+                            <div style={{ display: 'flex', gap: 6 }}>
+                              <select className="rw-admin-input" style={{ flex: 1 }} value={editNotifForm.type} onChange={(e) => setEditNotifForm((f) => ({ ...f, type: e.target.value }))}>
+                                <option value="info">ℹ Info</option>
+                                <option value="warning">⚠ Warning</option>
+                                <option value="success">✓ Success</option>
+                                <option value="error">✕ Error</option>
+                              </select>
+                              <select className="rw-admin-input" style={{ flex: 1 }} value={editNotifForm.priority} onChange={(e) => setEditNotifForm((f) => ({ ...f, priority: e.target.value }))}>
+                                <option value="low">Low</option>
+                                <option value="medium">Medium</option>
+                                <option value="high">High</option>
+                                <option value="urgent">🔴 Urgent</option>
+                              </select>
+                            </div>
+                            <div style={{ display: 'flex', gap: 6 }}>
+                              <button className="rw-btn rw-btn-primary" style={{ flex: 1 }} onClick={async () => {
+                                await adminAPI.editNotification(uid, n.id, { message: editNotifForm.text, type: editNotifForm.type, priority: editNotifForm.priority });
+                                setEditingNotifId(null);
+                                const res = await adminAPI.getUserDetails(uid); setSelectedUser(res.data);
+                              }}>Save</button>
+                              <button className="rw-btn rw-btn-secondary" style={{ flex: 1 }} onClick={() => setEditingNotifId(null)}>Cancel</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                            <div>
+                              <span style={{ fontSize: '0.78rem', fontWeight: 700, color: typeColor, textTransform: 'uppercase', marginRight: 6 }}>{n.type}</span>
+                              <span style={{ fontSize: '0.78rem', opacity: 0.6 }}>{n.priority}</span>
+                              <div style={{ marginTop: 4 }}>{n.message}</div>
+                              <div style={{ fontSize: '0.75rem', opacity: 0.5, marginTop: 2 }}>{n.createdAt ? new Date(n.createdAt).toLocaleString() : ''}</div>
+                            </div>
+                            <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                              <button className="rw-btn rw-btn-secondary" style={{ padding: '3px 10px', fontSize: '0.78rem' }} onClick={() => {
+                                setEditingNotifId(n.id);
+                                setEditNotifForm({ text: n.message, type: n.type || 'info', priority: n.priority || 'medium' });
+                              }}>Edit</button>
+                              <button className="rw-btn" style={{ padding: '3px 10px', fontSize: '0.78rem', background: 'rgba(239,68,68,0.12)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)' }} onClick={async () => {
+                                await adminAPI.deleteUserNotification(uid, n.id);
+                                const res = await adminAPI.getUserDetails(uid); setSelectedUser(res.data);
+                              }}>Delete</button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             <div className="rw-admin-modal-section">
               <h3>Wallets &amp; Balances</h3>
