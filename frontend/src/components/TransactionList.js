@@ -6,21 +6,14 @@ function TransactionList({ transactions }) {
   const [showExport, setShowExport] = useState(false);
   
   const formatDate = (date) => {
-    const now = new Date();
+    if (!date) return '—';
     const txDate = new Date(date);
-    const diffMs = now - txDate;
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-
-    if (diffMins < 60) return `${diffMins} min ago`;
-    if (diffHours < 24) return `${diffHours} hours ago`;
-    if (diffDays < 30) return `${diffDays} days ago`;
-    
-    return txDate.toLocaleDateString('en-US', {
+    return txDate.toLocaleString('en-US', {
       day: 'numeric',
       month: 'short',
-      year: 'numeric'
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
     });
   };
 

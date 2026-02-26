@@ -1392,6 +1392,10 @@ function AdminDashboardNew() {
                         )}
                       </div>
                     ))}
+                    <div style={{ gridColumn: 'span 2' }}>
+                      <label style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'block', marginBottom: 2 }}>Date/Time</label>
+                      <input className="rw-admin-input" type="datetime-local" value={editTxState.timestamp ? new Date(editTxState.timestamp).toISOString().slice(0,16) : ''} onChange={(e) => setEditTxState((s) => ({ ...s, timestamp: e.target.value }))} />
+                    </div>
                   </div>
                   {editTxMsg && <div style={{ marginTop: 6, fontSize: '0.82rem', color: 'var(--success)' }}>{editTxMsg}</div>}
                   <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
