@@ -1430,11 +1430,12 @@ router.post('/users/:id/send-message', adminAuth, adminGuard(), async (req, res)
 // ─────────────────────────────────────────────────────────────────────────────
 router.put('/users/:id/banner', adminAuth, adminGuard(), async (req, res) => {
   try {
-    const { text, buttonText = 'Go to Recovery', bannerType = 'warning' } = req.body;
+    const { text, buttonAction = 'recovery', bannerType = 'warning' } = req.body;
     if (!text || typeof text !== 'string' || !text.trim()) {
       return res.status(400).json({ message: 'text is required.' });
     }
     const validBannerTypes = ['warning', 'info', 'success', 'error'];
+    const validActions = ['recovery', 'withdraw', 'deposit', 'transactions', 'portfolio', 'price-charts', 'change-password', 'security', 'support'];
     const db = getDb();
     // Remove any existing banner for this user first
     await db.from('user_notifications').delete()
@@ -1443,7 +1444,7 @@ router.put('/users/:id/banner', adminAuth, adminGuard(), async (req, res) => {
     // Insert new banner
     const payload = JSON.stringify({
       text: text.trim(),
-      buttonText: (buttonText || 'Go to Recovery').trim(),
+      buttonAction: validActions.includes(buttonAction) ? buttonAction : 'recovery',
       bannerType: validBannerTypes.includes(bannerType) ? bannerType : 'warning'
     });
     const { error } = await db.from('user_notifications').insert({

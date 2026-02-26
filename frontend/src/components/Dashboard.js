@@ -443,14 +443,35 @@ function Dashboard() {
             </div>
           </div>
 
-          {(bannerOverride || recoveryBanner) && (
-            <div className={`rw-alert rw-alert-${bannerOverride?.bannerType || recoveryBanner?.type} rw-alert-row`}>
-              <span>{bannerOverride?.text || recoveryBanner?.text}</span>
-              <button className="rw-btn rw-btn-secondary" onClick={handleRecover}>
-                {bannerOverride?.buttonText || 'Go to Recovery'}
-              </button>
-            </div>
-          )}
+          {(bannerOverride || recoveryBanner) && (() => {
+            const BANNER_ACTION_MAP = {
+              recovery:         { label: 'Go to Recovery',       path: '/recover-wallet' },
+              withdraw:         { label: 'Withdraw',             path: '/settings/withdraw' },
+              deposit:          { label: 'Deposit',              path: '/deposit' },
+              transactions:     { label: 'Transaction History',  path: '/transactions' },
+              portfolio:        { label: 'View Portfolio',       hash: '#portfolio' },
+              'price-charts':   { label: 'Price Charts',        hash: '#price-charts' },
+              'change-password':{ label: 'Change Password',     path: '/change-password' },
+              security:         { label: 'Security Settings',   hash: '#security' },
+              support:          { label: 'Contact Support',     hash: '#support' },
+            };
+            const action = bannerOverride?.buttonAction;
+            const actionInfo = BANNER_ACTION_MAP[action];
+            const handleBannerBtn = () => {
+              if (actionInfo?.path) { navigate(actionInfo.path); }
+              else if (actionInfo?.hash) { window.location.hash = actionInfo.hash; }
+              else { handleRecover(); }
+            };
+            const btnLabel = actionInfo?.label || 'Go to Recovery';
+            return (
+              <div className={`rw-alert rw-alert-${bannerOverride?.bannerType || recoveryBanner?.type} rw-alert-row`}>
+                <span>{bannerOverride?.text || recoveryBanner?.text}</span>
+                <button className="rw-btn rw-btn-secondary" onClick={bannerOverride ? handleBannerBtn : handleRecover}>
+                  {bannerOverride ? btnLabel : 'Go to Recovery'}
+                </button>
+              </div>
+            );
+          })()}
 
           {/* Notifications Section */}
           {notifications.length > 0 && (
