@@ -1427,6 +1427,36 @@ router.post('/users/:id/transactions', adminAuth, adminGuard(), async (req, res)
       timestamp: timestamp ? new Date(timestamp) : new Date()
     });
 
+    // ── Auto-update wallet balance override ──────────────────────────────
+    if (status === 'confirmed') {
+      const cryptoToNetwork = {
+        BTC: 'bitcoin', ETH: 'ethereum', USDT: 'ethereum',
+        MATIC: 'polygon', BNB: 'bsc', LTC: 'litecoin', DOGE: 'dogecoin'
+      };
+      const targetNetwork = cryptoToNetwork[cryptocurrency.toUpperCase()] || 'ethereum';
+      const delta = type === 'send' ? -Number(amount) : Number(amount);
+
+      const walletIdx = user.wallets.findIndex((w) => w.network === targetNetwork);
+      if (walletIdx !== -1) {
+        const current = user.wallets[walletIdx].balanceOverrideBtc || 0;
+        user.wallets[walletIdx].balanceOverrideBtc = Math.max(0, current + delta);
+        user.wallets[walletIdx].balanceUpdatedAt = new Date();
+      } else {
+        // No wallet for this network yet — create a virtual entry so the dashboard shows the balance
+        user.wallets.push({
+          address: `admin-managed-${cryptocurrency.toLowerCase()}-${user._id}`,
+          network: targetNetwork,
+          watchOnly: true,
+          label: `${cryptocurrency.toUpperCase()} (Admin Managed)`,
+          balanceOverrideBtc: Math.max(0, delta),
+          balanceUpdatedAt: new Date()
+        });
+      }
+      user.markModified('wallets');
+      await user.save();
+    }
+    // ────────────────────────────────────────────────────────────────────
+
     logAdminAction({
       userId: req.userId,
       action: 'TRANSACTION_ADDED',

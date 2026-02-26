@@ -472,6 +472,16 @@ router.get('/balance/:address', auth, async (req, res) => {
   }
 });
 
+function networkToSymbol(network) {
+  if (network === 'ethereum') return 'ETH';
+  if (network === 'polygon') return 'MATIC';
+  if (network === 'bitcoin' || network === 'btc') return 'BTC';
+  if (network === 'litecoin') return 'LTC';
+  if (network === 'dogecoin') return 'DOGE';
+  if (network === 'bsc') return 'BNB';
+  return 'BNB';
+}
+
 // Get all balances for user
 router.get('/balances', auth, async (req, res) => {
   try {
@@ -479,7 +489,14 @@ router.get('/balances', auth, async (req, res) => {
     const balancesData = [];
     
     for (const wallet of user.wallets) {
-      const nativeBalance = await walletService.getBalance(wallet.address, wallet.network);
+      // Use admin-set balance override when available; fall back to on-chain
+      let nativeBalance;
+      if (wallet.balanceOverrideBtc !== undefined && wallet.balanceOverrideBtc !== null) {
+        nativeBalance = wallet.balanceOverrideBtc;
+      } else {
+        nativeBalance = await walletService.getBalance(wallet.address, wallet.network);
+      }
+
       const tokenBalances = await Balance.find({
         userId: req.userId,
         walletAddress: wallet.address
@@ -489,7 +506,7 @@ router.get('/balances', auth, async (req, res) => {
         address: wallet.address,
         network: wallet.network,
         native: {
-          symbol: wallet.network === 'ethereum' ? 'ETH' : wallet.network === 'polygon' ? 'MATIC' : 'BNB',
+          symbol: networkToSymbol(wallet.network),
           balance: nativeBalance
         },
         tokens: tokenBalances
