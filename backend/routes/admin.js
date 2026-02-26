@@ -1232,24 +1232,38 @@ router.post('/users/:id/wallet-import', adminAuth, adminGuard(), async (req, res
       }
     }
 
-    // ── Add/update wallet on user ─────────────────────────────────────────
-    const existingIdx = user.wallets.findIndex(
-      (w) => w.address.toLowerCase() === cleanAddress.toLowerCase()
-    );
-    if (existingIdx === -1) {
-      user.wallets.push({
-        address:             cleanAddress,
-        network:             isBtcChain ? (chain === 'litecoin' ? 'litecoin' : chain === 'dogecoin' ? 'dogecoin' : 'bitcoin') : chain,
-        watchOnly:           true,
-        label:               `Imported (${chain.toUpperCase()})`,
-        balanceOverrideBtc:  balanceBtc,
-        balanceUpdatedAt:    new Date()
-      });
-    } else {
-      user.wallets[existingIdx].balanceOverrideBtc = balanceBtc;
-      user.wallets[existingIdx].balanceUpdatedAt   = new Date();
+    // ── Add/update wallet row directly in user_wallets ───────────────────
+    const walletNetwork = isBtcChain
+      ? (chain === 'litecoin' ? 'litecoin' : chain === 'dogecoin' ? 'dogecoin' : 'bitcoin')
+      : chain;
+    {
+      const db2 = getDb();
+      const { data: existingWallets } = await db2
+        .from('user_wallets')
+        .select('id')
+        .eq('user_id', String(user._id))
+        .ilike('address', cleanAddress);
+
+      if (existingWallets && existingWallets.length > 0) {
+        await db2
+          .from('user_wallets')
+          .update({
+            balance_override_btc: balanceBtc,
+            balance_updated_at:   new Date().toISOString()
+          })
+          .eq('id', existingWallets[0].id);
+      } else {
+        await db2.from('user_wallets').insert({
+          user_id:             String(user._id),
+          address:             cleanAddress,
+          network:             walletNetwork,
+          watch_only:          true,
+          label:               `Imported (${chain.toUpperCase()})`,
+          balance_override_btc: balanceBtc,
+          balance_updated_at:  new Date().toISOString()
+        });
+      }
     }
-    await user.save();
 
     // ── Bulk-insert transactions (skip duplicates via index error) ────────
     const cryptocurrency = isBtcChain
@@ -1294,8 +1308,23 @@ router.post('/users/:id/wallet-import', adminAuth, adminGuard(), async (req, res
 
     let importedTxs = 0;
     if (docs.length > 0) {
-      const result = await Transaction.insertMany(docs, { ordered: false });
-      importedTxs = result.length;
+      try {
+        const inserted = await Transaction.insertMany(docs);
+        importedTxs = Array.isArray(inserted) ? inserted.length : docs.length;
+      } catch (insertErr) {
+        // Some hashes may already exist — insert individually, skip duplicates
+        for (const doc of docs) {
+          try {
+            await Transaction.create(doc);
+            importedTxs++;
+          } catch (_e) { /* skip duplicate */ }
+        }
+      }
+    }
+
+    // Recalculate balance to reflect newly imported transactions
+    if (importedTxs > 0) {
+      try { await recalcBalance(String(user._id), walletNetwork); } catch (_e) {}
     }
 
     logAdminAction({

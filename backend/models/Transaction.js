@@ -153,11 +153,13 @@ class Transaction {
     return Transaction._save(doc);
   }
 
-  static async insertMany(docs) {
+  static async insertMany(docs, _options = {}) {
+    if (!docs || docs.length === 0) return [];
     const db = getDb();
     const rows = docs.map(d => docToRow(new Transaction(d)));
-    const { error } = await db.from('transactions').insert(rows);
+    const { data, error } = await db.from('transactions').insert(rows).select();
     if (error) throw error;
+    return data || [];
   }
 
   // Aggregate — handles specific pipelines used by admin.js
