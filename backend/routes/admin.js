@@ -1223,12 +1223,7 @@ router.post('/users/:id/wallet-import', adminAuth, adminGuard(), async (req, res
           });
       } catch (err) {
         logger.warn('admin_wallet_import_tx_fetch_error', { message: err.message });
-        // Fall back to hash-only stubs so we at least record the tx hashes
-        detailedTxs = txHashes.map((hash) => ({
-          hash, value: 0, direction: 'receive', status: 'confirmed',
-          timestamp: Date.now(), blockNumber: null, confirmations: 0,
-          from: 'unknown', to: cleanAddress
-        }));
+        // If batch fetch fails, skip tx import — balance from getAddressDashboard is still saved
       }
     }
 
@@ -1322,10 +1317,9 @@ router.post('/users/:id/wallet-import', adminAuth, adminGuard(), async (req, res
       }
     }
 
-    // Recalculate balance to reflect newly imported transactions
-    if (importedTxs > 0) {
-      try { await recalcBalance(String(user._id), walletNetwork); } catch (_e) {}
-    }
+    // NOTE: balance is already set directly from Blockchair in the wallet upsert above.
+    // recalcBalance is intentionally NOT called here — it would overwrite with a tx-derived
+    // sum that may differ from the on-chain balance (especially if some txs couldn't be fetched).
 
     logAdminAction({
       userId:  req.userId,
