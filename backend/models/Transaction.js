@@ -148,6 +148,11 @@ class Transaction {
     if (error) throw error;
   }
 
+  static async create(data) {
+    const doc = new Transaction(data);
+    return Transaction._save(doc);
+  }
+
   static async insertMany(docs) {
     const db = getDb();
     const rows = docs.map(d => docToRow(new Transaction(d)));
