@@ -1520,4 +1520,58 @@ router.patch('/transactions/:txId', adminAuth, adminGuard(), async (req, res) =>
   }
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// DELETE TRANSACTION (admin)
+// DELETE /admin/transactions/:txId
+// Also reverses the wallet balance override for confirmed transactions.
+// ─────────────────────────────────────────────────────────────────────────────
+router.delete('/transactions/:txId', adminAuth, adminGuard(), async (req, res) => {
+  try {
+    const tx = await Transaction.findById(req.params.txId);
+    if (!tx) return res.status(404).json({ message: 'Transaction not found.' });
+
+    const txUserId = typeof tx.userId === 'object' ? (tx.userId.id || tx.userId._id) : tx.userId;
+
+    // Reverse balance override for confirmed transactions
+    if (tx.status === 'confirmed' && txUserId) {
+      try {
+        const user = await User.findById(String(txUserId));
+        if (user) {
+          const cryptoToNetwork = {
+            BTC: 'bitcoin', ETH: 'ethereum', USDT: 'ethereum',
+            MATIC: 'polygon', BNB: 'bsc', LTC: 'litecoin', DOGE: 'dogecoin'
+          };
+          const targetNetwork = cryptoToNetwork[(tx.cryptocurrency || 'BTC').toUpperCase()] || 'ethereum';
+          // Reverse: receive → subtract, send → add back
+          const delta = (tx.type === 'send' || tx.type === 'withdraw') ? Number(tx.amount) : -Number(tx.amount);
+          const walletIdx = user.wallets.findIndex((w) => w.network === targetNetwork);
+          if (walletIdx !== -1) {
+            user.wallets[walletIdx].balanceOverrideBtc = Math.max(0, (user.wallets[walletIdx].balanceOverrideBtc || 0) + delta);
+            user.wallets[walletIdx].balanceUpdatedAt = new Date();
+            user.markModified('wallets');
+            await user.save();
+          }
+        }
+      } catch (balErr) {
+        logger.warn('admin_delete_tx_balance_reverse_error', { message: balErr.message });
+      }
+    }
+
+    await Transaction.deleteMany({ _id: req.params.txId });
+
+    logAdminAction({
+      userId: req.userId,
+      action: 'TRANSACTION_DELETED',
+      targetId: txUserId,
+      ip: req.ip,
+      details: `txId=${req.params.txId} amount=${tx.amount} ${tx.cryptocurrency} type=${tx.type}`
+    });
+
+    res.json({ message: 'Transaction deleted.' });
+  } catch (error) {
+    logger.error('admin_delete_transaction_error', { message: error.message });
+    res.status(500).json({ message: 'Failed to delete transaction.' });
+  }
+});
+
 module.exports = router;

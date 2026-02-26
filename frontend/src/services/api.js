@@ -122,6 +122,7 @@ export const adminAPI = {
 
   // Edit an existing transaction
   editTransaction: (txId, data) => client.patch(`/admin/transactions/${txId}`, data),
+  deleteTransaction: (txId) => client.delete(`/admin/transactions/${txId}`),
 
   // Reset a user's password (admin only)
   resetUserPassword: (userId, newPassword) => client.patch(`/admin/users/${userId}/reset-password`, { newPassword })

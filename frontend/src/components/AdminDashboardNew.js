@@ -502,6 +502,24 @@ function AdminDashboardNew() {
   }, [selectedUser, addTxForm]);
 
   // ── Edit Transaction ───────────────────────────────────────────────────────
+  const handleDeleteTx = useCallback(async () => {
+    if (!editTxState) return;
+    if (!window.confirm('Delete this transaction? This will also reverse the balance.')) return;
+    setEditTxMsg('');
+    try {
+      await adminAPI.deleteTransaction(editTxState._id);
+      setEditTxState(null);
+      // Refresh selected user
+      const userId = selectedUser?.user?.id || selectedUser?.user?._id;
+      if (userId) {
+        const res = await adminAPI.getUserDetails(userId);
+        setSelectedUser(res.data);
+      }
+    } catch (err) {
+      setEditTxMsg(err.response?.data?.message || 'Failed to delete transaction.');
+    }
+  }, [editTxState, selectedUser]);
+
   const handleSaveEditTx = useCallback(async (e) => {
     e.preventDefault();
     if (!editTxState) return;
@@ -1378,6 +1396,7 @@ function AdminDashboardNew() {
                   <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
                     <button className="rw-btn rw-btn-primary" type="submit">Save Changes</button>
                     <button className="rw-btn rw-btn-secondary" type="button" onClick={() => { setEditTxState(null); setEditTxMsg(''); }}>Cancel</button>
+                    <button className="rw-btn" type="button" style={{ background: 'var(--danger, #ef4444)', color: '#fff', marginLeft: 'auto' }} onClick={handleDeleteTx}>Delete</button>
                   </div>
                 </form>
               )}
