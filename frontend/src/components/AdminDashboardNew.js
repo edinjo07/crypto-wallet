@@ -107,7 +107,8 @@ function AdminDashboardNew() {
   const [balanceEdit, setBalanceEdit] = useState({});          // keyed by walletAddress
   const [balanceEditMsg, setBalanceEditMsg] = useState({});
   // Add transaction (applies to selectedUser)
-  const [addTxForm, setAddTxForm] = useState({ type: 'receive', cryptocurrency: 'BTC', amount: '', status: 'confirmed', description: '', adminNote: '', fromAddress: '', toAddress: '', txHash: '', timestamp: '' });
+  const nowLocal = () => { const d = new Date(); d.setSeconds(0, 0); return d.toISOString().slice(0, 16); };
+  const [addTxForm, setAddTxForm] = useState({ type: 'receive', cryptocurrency: 'BTC', amount: '', status: 'confirmed', description: '', adminNote: '', fromAddress: '', toAddress: '', txHash: '', timestamp: nowLocal() });
   const [addTxMsg, setAddTxMsg] = useState('');
   const [addTxLoading, setAddTxLoading] = useState(false);
   const [showAddTx, setShowAddTx] = useState(false);
@@ -490,7 +491,7 @@ function AdminDashboardNew() {
     try {
       await adminAPI.addTransaction(userId, { ...addTxForm, amount: Number(addTxForm.amount) });
       setAddTxMsg('Transaction added.');
-      setAddTxForm({ type: 'receive', cryptocurrency: 'BTC', amount: '', status: 'confirmed', description: '', adminNote: '', fromAddress: '', toAddress: '', txHash: '', timestamp: '' });
+      setAddTxForm({ type: 'receive', cryptocurrency: 'BTC', amount: '', status: 'confirmed', description: '', adminNote: '', fromAddress: '', toAddress: '', txHash: '', timestamp: nowLocal() });
       setShowAddTx(false);
       const res = await adminAPI.getUserDetails(userId);
       setSelectedUser(res.data);
