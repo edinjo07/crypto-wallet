@@ -971,6 +971,7 @@ function AdminDashboardNew() {
                           <tr>
                             <th>Name</th>
                             <th>Email</th>
+                            <th>User ID</th>
                             <th>Role</th>
                             <th>Joined</th>
                             <th>Action</th>
@@ -981,6 +982,16 @@ function AdminDashboardNew() {
                             <tr key={account.id}>
                               <td>{account.name}</td>
                               <td>{account.email}</td>
+                              <td style={{ whiteSpace: 'nowrap' }}>
+                                <span style={{ fontFamily: 'monospace', fontSize: '0.78em', opacity: 0.8 }}>
+                                  {String(account.id).slice(0, 8)}…
+                                </span>
+                                <button
+                                  title="Copy full ID"
+                                  style={{ marginLeft: 6, cursor: 'pointer', background: 'none', border: 'none', padding: '0 4px', fontSize: '0.85em', opacity: 0.7 }}
+                                  onClick={() => { navigator.clipboard.writeText(String(account.id)); }}
+                                >⎘</button>
+                              </td>
                               <td>{account.role}</td>
                               <td>{account.createdAt ? new Date(account.createdAt).toLocaleDateString() : '—'}</td>
                               <td>
