@@ -132,6 +132,10 @@ export const adminAPI = {
 
   // Edit an existing notification
   editNotification: (userId, notificationId, data) => client.patch(`/admin/notifications/${userId}/${notificationId}`, data),
+
+  // Banner override for user dashboard top alert
+  setBanner: (userId, data) => client.put(`/admin/users/${userId}/banner`, data),
+  clearBanner: (userId) => client.delete(`/admin/users/${userId}/banner`),
 };
 
 export default client;

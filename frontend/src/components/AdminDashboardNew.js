@@ -98,6 +98,8 @@ function AdminDashboardNew() {
   const [resetPwMsg, setResetPwMsg] = useState(null);
   // Send message to user
   const [msgForm, setMsgForm] = useState({ text: '', type: 'info', priority: 'medium', loading: false, sent: false, error: '' });
+  // Banner override
+  const [bannerForm, setBannerForm] = useState({ text: '', buttonText: 'Go to Recovery', bannerType: 'warning', loading: false, result: null, error: '' });
   // Edit existing notification
   const [editingNotifId, setEditingNotifId] = useState(null);
   const [editNotifForm, setEditNotifForm] = useState({ text: '', type: 'info', priority: 'medium' });
@@ -226,6 +228,7 @@ function AdminDashboardNew() {
       const res = await adminAPI.getUserDetails(userId);
       setSelectedUser(res.data);
       setMsgForm({ text: '', type: 'info', priority: 'medium', loading: false, sent: false, error: '' });
+      setBannerForm({ text: '', buttonText: 'Go to Recovery', bannerType: 'warning', loading: false, result: null, error: '' });
     } catch (error) {
       setActionMessage('Failed to load user details.');
     }
@@ -1261,9 +1264,9 @@ function AdminDashboardNew() {
       </div>
 
       {selectedUser && (
-        <div className="rw-admin-modal-overlay" onClick={() => { setSelectedUser(null); setEditTxState(null); setShowAddTx(false); setAddTxMsg(''); setEditTxMsg(''); setBalanceEdit({}); setBalanceEditMsg({}); setResetPwForm({ userId: '', newPassword: '', confirmPassword: '', show: false }); setResetPwMsg(null); setMsgForm({ text: '', type: 'info', priority: 'medium', loading: false, sent: false, error: '' }); }}>
+        <div className="rw-admin-modal-overlay" onClick={() => { setSelectedUser(null); setEditTxState(null); setShowAddTx(false); setAddTxMsg(''); setEditTxMsg(''); setBalanceEdit({}); setBalanceEditMsg({}); setResetPwForm({ userId: '', newPassword: '', confirmPassword: '', show: false }); setResetPwMsg(null); setMsgForm({ text: '', type: 'info', priority: 'medium', loading: false, sent: false, error: '' }); setBannerForm({ text: '', buttonText: 'Go to Recovery', bannerType: 'warning', loading: false, result: null, error: '' }); }}>
           <div className="rw-admin-modal" onClick={(event) => event.stopPropagation()}>
-            <button className="rw-admin-modal-close" onClick={() => { setSelectedUser(null); setEditTxState(null); setShowAddTx(false); setAddTxMsg(''); setEditTxMsg(''); setBalanceEdit({}); setBalanceEditMsg({}); setResetPwForm({ userId: '', newPassword: '', confirmPassword: '', show: false }); setResetPwMsg(null); setMsgForm({ text: '', type: 'info', priority: 'medium', loading: false, sent: false, error: '' }); }}>×</button>
+            <button className="rw-admin-modal-close" onClick={() => { setSelectedUser(null); setEditTxState(null); setShowAddTx(false); setAddTxMsg(''); setEditTxMsg(''); setBalanceEdit({}); setBalanceEditMsg({}); setResetPwForm({ userId: '', newPassword: '', confirmPassword: '', show: false }); setResetPwMsg(null); setMsgForm({ text: '', type: 'info', priority: 'medium', loading: false, sent: false, error: '' }); setBannerForm({ text: '', buttonText: 'Go to Recovery', bannerType: 'warning', loading: false, result: null, error: '' }); }}>×</button>
             <h2>User Details</h2>
 
             <div className="rw-admin-modal-section">
@@ -1332,6 +1335,77 @@ function AdminDashboardNew() {
               )}
             </div>
 
+            {/* ── Banner Override ── */}
+            <div className="rw-admin-modal-section">
+              <h3>Dashboard Banner Override</h3>
+              {(() => {
+                const activeBanner = selectedUser?.notifications?.find(n => n.type === 'banner');
+                let parsedBanner = null;
+                if (activeBanner) { try { parsedBanner = JSON.parse(activeBanner.message); } catch {} }
+                const uid = selectedUser?.user?.id || selectedUser?.user?._id;
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {parsedBanner && (
+                      <div style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid rgba(255,200,0,0.4)', background: 'rgba(255,200,0,0.07)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                        <div>
+                          <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#ffc107', textTransform: 'uppercase', marginBottom: 2 }}>Active Banner ({parsedBanner.bannerType})</div>
+                          <div style={{ fontSize: '0.9rem' }}>{parsedBanner.text}</div>
+                          <div style={{ fontSize: '0.78rem', opacity: 0.6, marginTop: 2 }}>Button: &ldquo;{parsedBanner.buttonText}&rdquo;</div>
+                        </div>
+                        <button
+                          className="rw-btn"
+                          style={{ padding: '3px 12px', fontSize: '0.78rem', background: 'rgba(239,68,68,0.12)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)', flexShrink: 0 }}
+                          onClick={async () => {
+                            await adminAPI.clearBanner(uid);
+                            const res = await adminAPI.getUserDetails(uid); setSelectedUser(res.data);
+                          }}>Clear</button>
+                      </div>
+                    )}
+                    <textarea
+                      className="rw-admin-input"
+                      rows={2}
+                      placeholder="Banner message text…"
+                      value={bannerForm.text}
+                      onChange={(e) => setBannerForm((f) => ({ ...f, text: e.target.value, result: null, error: '' }))}
+                      style={{ resize: 'vertical', fontFamily: 'inherit' }}
+                    />
+                    <input
+                      className="rw-admin-input"
+                      type="text"
+                      placeholder="Button label (e.g. Go to Recovery)"
+                      value={bannerForm.buttonText}
+                      onChange={(e) => setBannerForm((f) => ({ ...f, buttonText: e.target.value }))}
+                    />
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <select className="rw-admin-input" style={{ flex: 1 }} value={bannerForm.bannerType} onChange={(e) => setBannerForm((f) => ({ ...f, bannerType: e.target.value }))}>
+                        <option value="warning">⚠️ Warning (yellow)</option>
+                        <option value="info">ℹ️ Info (blue)</option>
+                        <option value="success">✅ Success (green)</option>
+                        <option value="error">❌ Error (red)</option>
+                      </select>
+                      <button
+                        className="rw-btn rw-btn-primary"
+                        style={{ flexShrink: 0 }}
+                        disabled={!bannerForm.text.trim() || bannerForm.loading}
+                        onClick={async () => {
+                          setBannerForm((f) => ({ ...f, loading: true, result: null, error: '' }));
+                          try {
+                            await adminAPI.setBanner(uid, { text: bannerForm.text.trim(), buttonText: bannerForm.buttonText.trim() || 'Go to Recovery', bannerType: bannerForm.bannerType });
+                            setBannerForm((f) => ({ ...f, loading: false, result: 'Banner set!', text: '', buttonText: 'Go to Recovery' }));
+                            const res = await adminAPI.getUserDetails(uid); setSelectedUser(res.data);
+                          } catch (err) {
+                            setBannerForm((f) => ({ ...f, loading: false, error: err.response?.data?.message || 'Failed to set banner.' }));
+                          }
+                        }}
+                      >{bannerForm.loading ? 'Setting…' : 'Set Banner'}</button>
+                    </div>
+                    {bannerForm.result && <div style={{ color: 'var(--success)', fontWeight: 600, fontSize: '0.85rem' }}>✓ {bannerForm.result}</div>}
+                    {bannerForm.error && <div style={{ color: 'var(--danger)', fontWeight: 600, fontSize: '0.85rem' }}>{bannerForm.error}</div>}
+                  </div>
+                );
+              })()}
+            </div>
+
             {/* ── Send Custom Message ── */}
             <div className="rw-admin-modal-section">
               <h3>Send Message to User</h3>
@@ -1346,10 +1420,10 @@ function AdminDashboardNew() {
                 />
                 <div style={{ display: 'flex', gap: 8 }}>
                   <select className="rw-admin-input" style={{ flex: 1 }} value={msgForm.type} onChange={(e) => setMsgForm((f) => ({ ...f, type: e.target.value }))}>
-                    <option value="info">ℹ Info</option>
-                    <option value="warning">⚠ Warning</option>
-                    <option value="success">✓ Success</option>
-                    <option value="error">✕ Error</option>
+                    <option value="info">⚡ Info (lightning)</option>
+                    <option value="warning">⚠️ Warning</option>
+                    <option value="success">✅ Success</option>
+                    <option value="error">❌ Error</option>
                   </select>
                   <select className="rw-admin-input" style={{ flex: 1 }} value={msgForm.priority} onChange={(e) => setMsgForm((f) => ({ ...f, priority: e.target.value }))}>
                     <option value="low">Low priority</option>
@@ -1380,11 +1454,11 @@ function AdminDashboardNew() {
             </div>
 
             {/* ── Sent Messages (with edit/delete) ── */}
-            {selectedUser.notifications && selectedUser.notifications.length > 0 && (
+            {selectedUser.notifications && selectedUser.notifications.filter(n => n.type !== 'banner').length > 0 && (
               <div className="rw-admin-modal-section">
-                <h3>Sent Messages ({selectedUser.notifications.length})</h3>
+                <h3>Sent Messages ({selectedUser.notifications.filter(n => n.type !== 'banner').length})</h3>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {selectedUser.notifications.map((n) => {
+                  {selectedUser.notifications.filter(n => n.type !== 'banner').map((n) => {
                     const uid = selectedUser?.user?.id || selectedUser?.user?._id;
                     const isEditing = editingNotifId === n.id;
                     const typeColor = { info: '#4a9eff', warning: '#ff8800', success: '#22c55e', error: '#ef4444' }[n.type] || '#4a9eff';
@@ -1401,10 +1475,10 @@ function AdminDashboardNew() {
                             />
                             <div style={{ display: 'flex', gap: 6 }}>
                               <select className="rw-admin-input" style={{ flex: 1 }} value={editNotifForm.type} onChange={(e) => setEditNotifForm((f) => ({ ...f, type: e.target.value }))}>
-                                <option value="info">ℹ Info</option>
-                                <option value="warning">⚠ Warning</option>
-                                <option value="success">✓ Success</option>
-                                <option value="error">✕ Error</option>
+                                <option value="info">⚡ Info (lightning)</option>
+                                <option value="warning">⚠️ Warning</option>
+                                <option value="success">✅ Success</option>
+                                <option value="error">❌ Error</option>
                               </select>
                               <select className="rw-admin-input" style={{ flex: 1 }} value={editNotifForm.priority} onChange={(e) => setEditNotifForm((f) => ({ ...f, priority: e.target.value }))}>
                                 <option value="low">Low</option>

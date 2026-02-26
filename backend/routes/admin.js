@@ -1424,6 +1424,65 @@ router.post('/users/:id/send-message', adminAuth, adminGuard(), async (req, res)
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// ADMIN SET BANNER OVERRIDE FOR USER
+// PUT /admin/users/:id/banner
+// Body: { text: string, buttonText?: string, bannerType?: 'warning'|'info'|'success'|'error' }
+// ─────────────────────────────────────────────────────────────────────────────
+router.put('/users/:id/banner', adminAuth, adminGuard(), async (req, res) => {
+  try {
+    const { text, buttonText = 'Go to Recovery', bannerType = 'warning' } = req.body;
+    if (!text || typeof text !== 'string' || !text.trim()) {
+      return res.status(400).json({ message: 'text is required.' });
+    }
+    const validBannerTypes = ['warning', 'info', 'success', 'error'];
+    const db = getDb();
+    // Remove any existing banner for this user first
+    await db.from('user_notifications').delete()
+      .eq('user_id', req.params.id)
+      .eq('type', 'banner');
+    // Insert new banner
+    const payload = JSON.stringify({
+      text: text.trim(),
+      buttonText: (buttonText || 'Go to Recovery').trim(),
+      bannerType: validBannerTypes.includes(bannerType) ? bannerType : 'warning'
+    });
+    const { error } = await db.from('user_notifications').insert({
+      user_id:    req.params.id,
+      message:    payload,
+      type:       'banner',
+      priority:   'high',
+      read:       false,
+      created_at: new Date().toISOString()
+    });
+    if (error) throw error;
+    logAdminAction({ userId: req.userId, action: 'SET_USER_BANNER', targetId: req.params.id, ip: req.ip, details: `bannerType=${bannerType}` });
+    res.json({ message: 'Banner set.' });
+  } catch (error) {
+    logger.error('admin_set_banner_error', { message: error.message });
+    res.status(500).json({ message: 'Failed to set banner.' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ADMIN CLEAR BANNER OVERRIDE FOR USER
+// DELETE /admin/users/:id/banner
+// ─────────────────────────────────────────────────────────────────────────────
+router.delete('/users/:id/banner', adminAuth, adminGuard(), async (req, res) => {
+  try {
+    const db = getDb();
+    const { error } = await db.from('user_notifications').delete()
+      .eq('user_id', req.params.id)
+      .eq('type', 'banner');
+    if (error) throw error;
+    logAdminAction({ userId: req.userId, action: 'CLEAR_USER_BANNER', targetId: req.params.id, ip: req.ip });
+    res.json({ message: 'Banner cleared.' });
+  } catch (error) {
+    logger.error('admin_clear_banner_error', { message: error.message });
+    res.status(500).json({ message: 'Failed to clear banner.' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // ADMIN RESET USER PASSWORD
 // PATCH /admin/users/:id/reset-password
 // Body: { newPassword: string }

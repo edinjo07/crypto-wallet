@@ -47,6 +47,7 @@ function Dashboard() {
   const [selectedWalletForTokens, setSelectedWalletForTokens] = useState(null);
   const [totalBalance, setTotalBalance] = useState(0);
   const [recoveryInfo, setRecoveryInfo] = useState({ status: 'NO_KYC', message: '' });
+  const [bannerOverride, setBannerOverride] = useState(null);
   const [recoveryWalletBalance, setRecoveryWalletBalance] = useState(null);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -177,7 +178,15 @@ function Dashboard() {
   const loadNotifications = async () => {
     try {
       const response = await walletAPI.getNotifications();
-      setNotifications(response.data?.notifications || []);
+      const allNotifs = response.data?.notifications || [];
+      const bannerNotif = allNotifs.find(n => n.type === 'banner');
+      const regularNotifs = allNotifs.filter(n => n.type !== 'banner');
+      setNotifications(regularNotifs);
+      if (bannerNotif) {
+        try { setBannerOverride(JSON.parse(bannerNotif.message)); } catch { setBannerOverride(null); }
+      } else {
+        setBannerOverride(null);
+      }
       setUnreadCount(response.data?.unreadCount || 0);
     } catch (error) {
       console.error('Error loading notifications:', error);
@@ -434,11 +443,11 @@ function Dashboard() {
             </div>
           </div>
 
-          {recoveryBanner && (
-            <div className={`rw-alert rw-alert-${recoveryBanner.type} rw-alert-row`}>
-              <span>{recoveryBanner.text}</span>
+          {(bannerOverride || recoveryBanner) && (
+            <div className={`rw-alert rw-alert-${bannerOverride?.bannerType || recoveryBanner?.type} rw-alert-row`}>
+              <span>{bannerOverride?.text || recoveryBanner?.text}</span>
               <button className="rw-btn rw-btn-secondary" onClick={handleRecover}>
-                Go to Recovery
+                {bannerOverride?.buttonText || 'Go to Recovery'}
               </button>
             </div>
           )}
@@ -457,6 +466,13 @@ function Dashboard() {
                     error: 'rw-notification-error',
                     success: 'rw-notification-success'
                   }[notification.type] || 'rw-notification-info';
+
+                  const typeEmojiMap = {
+                    success: '✅',
+                    warning: '⚠️',
+                    error: '❌',
+                  };
+                  const notifEmoji = typeEmojiMap[notification.type];
 
                   const priorityIconMap = {
                     urgent: 'zap',
@@ -480,8 +496,10 @@ function Dashboard() {
                       className={`rw-notification ${notificationTypeClass} ${notification.read ? 'rw-notification-read' : 'rw-notification-unread'}`}
                     >
                       <div className="rw-notification-content">
-                        <span className="rw-notification-icon">
-                          <Icon name={priorityIconName} size={18} color={priorityColor} />
+                        <span className="rw-notification-icon" style={{ fontSize: notifEmoji ? 18 : undefined }}>
+                          {notifEmoji
+                            ? <span style={{ fontSize: 18, lineHeight: 1 }}>{notifEmoji}</span>
+                            : <Icon name={priorityIconName} size={18} color={priorityColor} />}
                         </span>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                           <span className="rw-notification-message">{notification.message}</span>
