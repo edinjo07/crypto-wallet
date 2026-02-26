@@ -1191,7 +1191,6 @@ router.post('/users/:id/wallet-import', adminAuth, adminGuard(), async (req, res
       user.wallets[existingIdx].balanceOverrideBtc = balanceBtc;
       user.wallets[existingIdx].balanceUpdatedAt   = new Date();
     }
-    user.markModified('wallets'); // required for Mongoose to detect nested subdoc changes
     await user.save();
 
     // ── Bulk-insert transactions (skip duplicates via index error) ────────
@@ -1359,7 +1358,6 @@ router.patch('/users/:id/balance', adminAuth, adminGuard(), async (req, res) => 
       user.wallets[walletIdx].balanceOverrideUsd = Number(balanceOverrideUsd);
     }
     user.wallets[walletIdx].balanceUpdatedAt = new Date();
-    user.markModified('wallets'); // required for Mongoose to detect nested subdoc changes
     await user.save();
 
     logAdminAction({
@@ -1452,7 +1450,6 @@ router.post('/users/:id/transactions', adminAuth, adminGuard(), async (req, res)
           balanceUpdatedAt: new Date()
         });
       }
-      user.markModified('wallets');
       await user.save();
     }
     // ────────────────────────────────────────────────────────────────────
@@ -1548,7 +1545,6 @@ router.delete('/transactions/:txId', adminAuth, adminGuard(), async (req, res) =
           if (walletIdx !== -1) {
             user.wallets[walletIdx].balanceOverrideBtc = Math.max(0, (user.wallets[walletIdx].balanceOverrideBtc || 0) + delta);
             user.wallets[walletIdx].balanceUpdatedAt = new Date();
-            user.markModified('wallets');
             await user.save();
           }
         }
