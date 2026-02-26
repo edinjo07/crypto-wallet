@@ -346,22 +346,32 @@ function Dashboard() {
     return metrics;
   }, [balances.length, priceMap.BTC, priceMap.ETH, priceMap.USDT, prices, totalBalance, recoveryWalletBalance]);
 
-  const portfolioRows = useMemo(() => balances.map((wallet) => {
-    const symbol = wallet?.native?.symbol?.toUpperCase() || '';
-    const amount = parseFloat(wallet?.native?.balance || 0);
-    const price = priceMap[symbol];
-    const usdValue = typeof price === 'number' ? amount * price : null;
-    const label = wallet?.native?.symbol
-      ? `${wallet.native.symbol.toUpperCase()} (${wallet.network})`
-      : wallet?.network || 'Asset';
+  const portfolioRows = useMemo(() => {
+    // Aggregate wallets by symbol — combine all BTC wallets into one row, etc.
+    const aggregated = {};
+    balances.forEach((wallet) => {
+      const symbol = wallet?.native?.symbol?.toUpperCase() || '';
+      const network = wallet?.network || '';
+      const key = `${symbol}-${network}`;
+      const amount = parseFloat(wallet?.native?.balance || 0);
+      if (!aggregated[key]) {
+        aggregated[key] = { symbol, network, totalAmount: 0 };
+      }
+      aggregated[key].totalAmount += amount;
+    });
 
-    return {
-      id: `${wallet?.address || wallet?.network}-${symbol}`,
-      label,
-      amount: Number.isNaN(amount) ? '—' : `${amount.toFixed(4)} ${symbol || ''}`.trim(),
-      usdValue: usdValue ? formatUsd(usdValue) : '—'
-    };
-  }).slice(0, 3), [balances, priceMap]);
+    return Object.values(aggregated).map(({ symbol, network, totalAmount }) => {
+      const price = priceMap[symbol];
+      const usdValue = typeof price === 'number' ? totalAmount * price : null;
+      const label = symbol ? `${symbol} (${network})` : network || 'Asset';
+      return {
+        id: `${network}-${symbol}`,
+        label,
+        amount: Number.isNaN(totalAmount) ? '—' : `${totalAmount.toFixed(4)} ${symbol}`.trim(),
+        usdValue: usdValue ? formatUsd(usdValue) : '—'
+      };
+    }).filter(r => r.id).slice(0, 5);
+  }, [balances, priceMap]);
 
   if (loading) {
     return (
