@@ -1136,7 +1136,7 @@ router.patch('/notifications/:userId/:notificationId', adminAuth, adminGuard(), 
   try {
     const { userId, notificationId } = req.params;
     const { message, type, priority } = req.body;
-    if (!message || !message.trim()) return res.status(400).json({ message: 'message is required.' });
+    if (!message || typeof message !== 'string' || !message.trim()) return res.status(400).json({ message: 'message is required.' });
     const validTypes = ['info', 'warning', 'success', 'error'];
     const validPriorities = ['low', 'medium', 'high', 'urgent'];
     const db = getDb();
