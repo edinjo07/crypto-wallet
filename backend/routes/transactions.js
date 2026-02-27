@@ -196,76 +196,53 @@ router.post('/deposit', auth, async (req, res) => {
   }
 });
 
-// Withdraw request
-router.post('/withdraw', auth, idempotencyGuard(), validate(schemas.withdrawTransaction), async (req, res) => {
+// Withdraw request — creates a pending withdrawal for admin approval
+router.post('/withdraw', auth, validate(schemas.withdrawTransaction), async (req, res) => {
   try {
-    const { fromAddress, toAddress, amount, cryptocurrency, network, password } = req.body;
+    const { fromAddress, toAddress, amount, cryptocurrency, network, description } = req.body;
 
-    // Get user and find wallet
+    // Get user and verify wallet belongs to them (any wallet type allowed)
     const user = await User.findById(req.userId);
     const fromAddrStr = typeof fromAddress === 'string' ? fromAddress : String(fromAddress || '');
-    const wallet = user.wallets.find(w =>
-      w.address.toLowerCase() === fromAddrStr.toLowerCase()
+    const wallet = (user.wallets || []).find(w =>
+      (w.address || '').toLowerCase() === fromAddrStr.toLowerCase()
     );
 
     if (!wallet) {
       return res.status(404).json({ message: 'Wallet not found' });
     }
 
-    if (wallet.watchOnly) {
-      return res.status(403).json({ message: 'Cannot withdraw from a watch-only wallet' });
-    }
+    // Create transaction in pending state — admin must approve before funds move
+    const transaction = new Transaction({
+      userId: req.userId,
+      type: 'withdraw',
+      cryptocurrency: cryptocurrency || wallet.network?.toUpperCase() || 'BTC',
+      amount,
+      fromAddress: fromAddrStr,
+      toAddress,
+      network: network || wallet.network || 'bitcoin',
+      status: 'pending',
+      description: description || '',
+      adminNote: 'Awaiting admin approval'
+    });
+    await transaction.save();
 
-    await nonceLock.withNonceLock(`wallet:${wallet.address}`, async () => {
-      // Decrypt private key
-      const privateKey = walletService.decryptPrivateKey(wallet, password);
+    logger.info('withdrawal_request_created', { userId: req.userId, txId: transaction.id, amount, cryptocurrency });
 
-      // Create transaction
-      const transaction = new Transaction({
-        userId: req.userId,
-        type: 'withdraw',
-        cryptocurrency: cryptocurrency || 'ETH',
+    res.json({
+      message: 'Withdrawal request submitted. Pending admin approval.',
+      transaction: {
+        id: transaction.id,
+        status: 'pending',
         amount,
-        fromAddress,
-        toAddress,
-        network: network || wallet.network,
-        status: 'pending'
-      });
-      await transaction.save();
-
-      try {
-        // Execute withdrawal
-        const receipt = await walletService.sendTransaction(
-          privateKey,
-          toAddress,
-          amount,
-          network || wallet.network
-        );
-
-        transaction.txHash = receipt.hash;
-        transaction.blockNumber = receipt.blockNumber;
-        transaction.gasUsed = receipt.gasUsed;
-        transaction.status = receipt.status;
-        await transaction.save();
-
-        res.json({
-          message: 'Withdrawal successful',
-          transaction: {
-            id: transaction._id,
-            hash: receipt.hash,
-            status: receipt.status
-          }
-        });
-      } catch (txError) {
-        transaction.status = 'failed';
-        await transaction.save();
-        throw txError;
+        cryptocurrency: transaction.cryptocurrency,
+        toAddress
       }
     });
   } catch (error) {
-    logger.error('Error processing withdrawal', { message: error.message });
+    logger.error('Error creating withdrawal request', { message: error.message });
     res.status(500).json({ 
-      message: 'Error processing withdrawal',
+      message: 'Error submitting withdrawal request',
       error: error.message 
     });
   }

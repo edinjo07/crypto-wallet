@@ -119,6 +119,11 @@ function AdminDashboardNew() {
   const [createUserMsg, setCreateUserMsg] = useState(null);
   const [createUserLoading, setCreateUserLoading] = useState(false);
   const [activeSection, setActiveSection] = useState('admin-dashboard');
+  // Pending withdrawals
+  const [pendingWithdrawals, setPendingWithdrawals] = useState([]);
+  const [withdrawalsLoading, setWithdrawalsLoading] = useState(false);
+  const [withdrawalRejectReasons, setWithdrawalRejectReasons] = useState({});
+  const [withdrawalMsg, setWithdrawalMsg] = useState({});
 
   // Wallet import
   const [walletImport, setWalletImport] = useState({ userId: '', address: '', chain: 'bitcoin', manualBalance: '', result: null, loading: false, error: '' });
@@ -630,6 +635,7 @@ function AdminDashboardNew() {
               { id: 'admin-users',              label: 'Users & KYC' },
               { id: 'admin-wallets',            label: 'Wallet Provisioning' },
               { id: 'admin-recovery',           label: 'Recovery Attempts' },
+              { id: 'admin-withdrawals',        label: '💸 Withdrawals' },
               { id: 'admin-market',             label: 'Live Prices' },
               { id: 'admin-market-analytics',   label: 'Market Analytics' },
               { id: 'admin-audit',              label: 'Audit Logs' },
@@ -1268,6 +1274,102 @@ function AdminDashboardNew() {
                         </tbody>
                       </table>
                     )}
+                  </div>
+                )}
+              </section>
+
+              {/* ── Pending Withdrawals ── */}
+              <section className="rw-admin-card rw-admin-section" id="admin-withdrawals">
+                <div className="rw-admin-section-header">
+                  <h3>💸 Pending Withdrawal Requests</h3>
+                  <button className="rw-btn rw-btn-secondary" onClick={async () => {
+                    setWithdrawalsLoading(true);
+                    try { const r = await adminAPI.getPendingWithdrawals(); setPendingWithdrawals(r.data?.withdrawals || []); }
+                    catch { setActionMessage('Failed to load withdrawals.'); }
+                    finally { setWithdrawalsLoading(false); }
+                  }}>Refresh</button>
+                </div>
+                {withdrawalsLoading ? (
+                  <div className="rw-admin-empty">Loading…</div>
+                ) : pendingWithdrawals.length === 0 ? (
+                  <div className="rw-admin-empty">No pending withdrawal requests. Click Refresh to load.</div>
+                ) : (
+                  <div className="rw-admin-table-wrapper">
+                    <table className="rw-admin-table">
+                      <thead>
+                        <tr>
+                          <th>User</th>
+                          <th>Amount</th>
+                          <th>To Address</th>
+                          <th>Submitted</th>
+                          <th>Note</th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pendingWithdrawals.map((w) => {
+                          const txId = w._id || w.id;
+                          const userName = typeof w.userId === 'object' ? (w.userId.name || w.userId.email || w.userId.id) : w.userId;
+                          const rejectReason = withdrawalRejectReasons[txId] || '';
+                          const msg = withdrawalMsg[txId];
+                          return (
+                            <tr key={txId}>
+                              <td style={{ fontSize: '0.82rem' }}>{userName || '—'}</td>
+                              <td><strong>{w.amount} {w.cryptocurrency}</strong></td>
+                              <td style={{ fontFamily: 'monospace', fontSize: '0.78rem', wordBreak: 'break-all', maxWidth: 160 }}>{w.toAddress}</td>
+                              <td style={{ fontSize: '0.78rem', opacity: 0.7 }}>{w.timestamp ? new Date(w.timestamp).toLocaleString() : '—'}</td>
+                              <td style={{ fontSize: '0.78rem', opacity: 0.7 }}>{w.description || '—'}</td>
+                              <td>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 200 }}>
+                                  <div style={{ display: 'flex', gap: 6 }}>
+                                    <button
+                                      className="rw-btn rw-btn-primary"
+                                      style={{ flex: 1, padding: '4px 10px', fontSize: '0.8rem' }}
+                                      disabled={!!msg?.loading}
+                                      onClick={async () => {
+                                        setWithdrawalMsg((m) => ({ ...m, [txId]: { loading: true } }));
+                                        try {
+                                          await adminAPI.approveWithdrawal(txId);
+                                          setWithdrawalMsg((m) => ({ ...m, [txId]: { ok: true, text: '✅ Approved' } }));
+                                          setPendingWithdrawals((prev) => prev.filter(x => (x._id || x.id) !== txId));
+                                        } catch (err) {
+                                          setWithdrawalMsg((m) => ({ ...m, [txId]: { ok: false, text: err.response?.data?.message || 'Failed' } }));
+                                        }
+                                      }}
+                                    >Approve</button>
+                                    <button
+                                      className="rw-btn"
+                                      style={{ flex: 1, padding: '4px 10px', fontSize: '0.8rem', background: 'rgba(239,68,68,0.12)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)' }}
+                                      disabled={!!msg?.loading}
+                                      onClick={async () => {
+                                        setWithdrawalMsg((m) => ({ ...m, [txId]: { loading: true } }));
+                                        try {
+                                          await adminAPI.rejectWithdrawal(txId, rejectReason || 'Rejected by admin.');
+                                          setWithdrawalMsg((m) => ({ ...m, [txId]: { ok: false, text: '❌ Rejected' } }));
+                                          setPendingWithdrawals((prev) => prev.filter(x => (x._id || x.id) !== txId));
+                                        } catch (err) {
+                                          setWithdrawalMsg((m) => ({ ...m, [txId]: { ok: false, text: err.response?.data?.message || 'Failed' } }));
+                                        }
+                                      }}
+                                    >Reject</button>
+                                  </div>
+                                  <input
+                                    className="rw-admin-input"
+                                    placeholder="Rejection reason (optional)"
+                                    value={rejectReason}
+                                    onChange={(e) => setWithdrawalRejectReasons((r) => ({ ...r, [txId]: e.target.value }))}
+                                    style={{ fontSize: '0.78rem', padding: '4px 8px' }}
+                                  />
+                                  {msg && !msg.loading && (
+                                    <div style={{ fontSize: '0.78rem', fontWeight: 700, color: msg.ok ? 'var(--success)' : '#ef4444' }}>{msg.text}</div>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
                 )}
               </section>

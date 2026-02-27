@@ -145,19 +145,17 @@ const batchTransactionSchema = z.object({
 
 // Withdrawal schema
 const withdrawTransactionSchema = z.object({
-  fromAddress: ethereumAddressSchema,
-  toAddress: ethereumAddressSchema,
+  fromAddress: z.string().min(1, 'From address is required'),
+  toAddress: z.string().min(1, 'Recipient address is required'),
   amount: z
     .number()
     .positive('Amount must be greater than zero')
     .max(1000000, 'Amount exceeds maximum limit'),
   cryptocurrency: z
     .string()
-    .default('ETH'),
-  network: z
-    .enum(['ethereum', 'polygon', 'bsc'])
-    .default('ethereum'),
-  password: passwordSchema,
+    .default('BTC'),
+  network: z.string().default('bitcoin'),
+  description: z.string().optional(),
 });
 
 // Gas estimation schema

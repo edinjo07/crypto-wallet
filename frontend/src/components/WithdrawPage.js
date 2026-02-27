@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { walletAPI, transactionAPI } from '../services/api';
 import Icon from './Icon';
@@ -13,86 +13,84 @@ function WithdrawPage() {
     fromAddress: '',
     toAddress: '',
     amount: '',
-    cryptocurrency: 'ETH',
-    password: '',
+    cryptocurrency: 'BTC',
+    network: 'bitcoin',
+    description: '',
   });
 
-  const [showPassword, setShowPassword] = useState(false);
-  const [estimatedGas, setEstimatedGas] = useState(null);
-  const [estimating, setEstimating] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState(null); // { hash, id }
+  const [success, setSuccess] = useState(null);
 
-  // Load wallets on mount
+  // Load ALL wallets (including watch-only)
   useEffect(() => {
     walletAPI.list()
       .then((res) => {
-        const sendable = (res.data.wallets || res.data || []).filter((w) => !w.watchOnly);
-        setWallets(sendable);
-        if (sendable.length > 0) {
-          setForm((f) => ({ ...f, fromAddress: sendable[0].address }));
+        const all = res.data.wallets || res.data || [];
+        setWallets(all);
+        if (all.length > 0) {
+          const first = all[0];
+          setForm((f) => ({
+            ...f,
+            fromAddress: first.address,
+            network: first.network || 'bitcoin',
+            cryptocurrency: cryptoForNetwork(first.network),
+          }));
         }
       })
       .catch(() => setError('Failed to load wallets.'))
       .finally(() => setWalletsLoading(false));
   }, []);
 
+  function cryptoForNetwork(network) {
+    const map = { bitcoin: 'BTC', ethereum: 'ETH', litecoin: 'LTC', dogecoin: 'DOGE', bsc: 'BNB', polygon: 'MATIC' };
+    return map[network] || (network || 'BTC').toUpperCase();
+  }
+
   const handleChange = (e) => {
     const { name, value } = e.target;
     setForm((f) => ({ ...f, [name]: value }));
     setError('');
-    setEstimatedGas(null);
+  };
+
+  const handleWalletSelect = (e) => {
+    const addr = e.target.value;
+    const w = wallets.find(x => x.address === addr);
+    setForm((f) => ({
+      ...f,
+      fromAddress: addr,
+      network: w?.network || 'bitcoin',
+      cryptocurrency: cryptoForNetwork(w?.network),
+    }));
+    setError('');
   };
 
   const selectedWallet = wallets.find((w) => w.address === form.fromAddress);
 
-  const handleEstimateGas = async () => {
-    if (!form.toAddress || !form.amount) {
-      setError('Enter recipient address and amount before estimating gas.');
-      return;
-    }
-    setEstimating(true);
-    setError('');
-    try {
-      const res = await transactionAPI.estimateGas({
-        toAddress: form.toAddress,
-        amount: parseFloat(form.amount),
-        network: selectedWallet?.network || 'ethereum',
-      });
-      setEstimatedGas(res.data);
-    } catch {
-      setError('Could not estimate gas fee. Check the recipient address and try again.');
-    } finally {
-      setEstimating(false);
-    }
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    if (!form.toAddress.trim()) return setError('Recipient address is required.');
+    if (!form.amount || parseFloat(form.amount) <= 0) return setError('Enter a valid amount.');
     setLoading(true);
     try {
       const res = await transactionAPI.withdraw({
         fromAddress: form.fromAddress,
-        toAddress: form.toAddress,
+        toAddress: form.toAddress.trim(),
         amount: parseFloat(form.amount),
         cryptocurrency: form.cryptocurrency,
-        network: selectedWallet?.network || 'ethereum',
-        password: form.password,
+        network: form.network,
+        description: form.description.trim(),
       });
-      setSuccess({
-        hash: res.data.transaction?.hash,
-        id: res.data.transaction?.id,
-      });
+      setSuccess(res.data);
     } catch (err) {
-      setError(err.response?.data?.message || 'Withdrawal failed. Please try again.');
+      setError(err.response?.data?.message || 'Failed to submit withdrawal. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  // ── Success screen ──────────────────────────────────────────────────────
+  // â”€â”€ Success screen â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (success) {
     return (
       <div className="rw-theme rw-page rw-recover">
@@ -100,37 +98,39 @@ function WithdrawPage() {
           <div style={{ textAlign: 'center', padding: '2rem 0' }}>
             <div style={{
               width: 100, height: 100, borderRadius: '50%',
-              background: 'rgba(52,199,89,0.15)',
+              background: 'rgba(255,170,0,0.12)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               margin: '0 auto 1.5rem',
             }}>
-              <Icon name="checkCircle" size={48} color="var(--success)" />
+              <Icon name="clock" size={48} color="#ff9f0a" />
             </div>
             <h2 style={{ color: 'var(--text-primary)', marginBottom: '0.75rem', fontSize: '1.75rem', fontWeight: 800 }}>
-              Withdrawal Sent!
+              Request Submitted
             </h2>
-            <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>
-              Your withdrawal has been broadcast to the network.
+            <p style={{ color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
+              Your withdrawal request is <strong>pending admin approval</strong>.
             </p>
-            {success.hash && (
-              <div style={{
-                padding: '1.25rem', background: 'var(--dark-bg)', borderRadius: 16,
-                wordBreak: 'break-all', fontSize: '0.875rem', fontFamily: 'monospace',
-                border: '1px solid var(--border-color)', color: 'var(--text-secondary)',
-                marginBottom: '1.5rem',
-              }}>
-                <div style={{ marginBottom: 6, fontWeight: 600, color: 'var(--text-muted)', fontFamily: 'inherit', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  Transaction Hash
-                </div>
-                {success.hash}
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginBottom: '1.5rem' }}>
+              You'll receive a notification once it's approved or rejected. Check your Transaction History to track its status.
+            </p>
+            <div style={{
+              padding: '1rem 1.25rem', background: 'var(--dark-bg)', borderRadius: 14,
+              border: '1px solid var(--border-color)', fontSize: '0.875rem',
+              color: 'var(--text-secondary)', marginBottom: '1.5rem', textAlign: 'left',
+            }}>
+              <div style={{ fontWeight: 700, marginBottom: 8, color: 'var(--text-primary)' }}>Request Details</div>
+              <div>Amount: <strong>{success.transaction?.amount} {success.transaction?.cryptocurrency}</strong></div>
+              <div style={{ marginTop: 4, fontFamily: 'monospace', wordBreak: 'break-all' }}>
+                To: {success.transaction?.toAddress}
               </div>
-            )}
+              <div style={{ marginTop: 4 }}>Status: <span style={{ color: '#ff9f0a', fontWeight: 600 }}>â³ Pending</span></div>
+            </div>
             <div style={{ display: 'flex', gap: 10 }}>
               <button className="rw-btn rw-btn-primary" onClick={() => navigate('/dashboard')} style={{ flex: 1 }}>
                 Back to Dashboard
               </button>
-              <button className="rw-btn rw-btn-secondary" onClick={() => { setSuccess(null); setForm((f) => ({ ...f, toAddress: '', amount: '', password: '' })); setEstimatedGas(null); }} style={{ flex: 1 }}>
-                New Withdrawal
+              <button className="rw-btn rw-btn-secondary" onClick={() => { setSuccess(null); setForm((f) => ({ ...f, toAddress: '', amount: '', description: '' })); }} style={{ flex: 1 }}>
+                New Request
               </button>
             </div>
           </div>
@@ -139,7 +139,7 @@ function WithdrawPage() {
     );
   }
 
-  // ── Main form ───────────────────────────────────────────────────────────
+  // â”€â”€ Main form â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   return (
     <div className="rw-theme rw-page rw-recover">
       <div className="rw-recover-container" style={{ maxWidth: 540 }}>
@@ -158,21 +158,20 @@ function WithdrawPage() {
             </div>
           </div>
           <h1>Withdraw Funds</h1>
-          <p className="rw-muted">Send crypto from your wallet to an external address.</p>
+          <p className="rw-muted">Submit a withdrawal request â€” admin approval required.</p>
         </div>
 
         <div className="rw-recover-box">
-
           {walletsLoading ? (
             <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
               <div className="spinner" style={{ margin: '0 auto 1rem' }} />
-              Loading wallets…
+              Loading walletsâ€¦
             </div>
           ) : wallets.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '2rem' }}>
               <Icon name="alertCircle" size={40} color="var(--warning)" />
               <p style={{ marginTop: '1rem', color: 'var(--text-secondary)' }}>
-                No spendable wallets found. Watch-only wallets cannot be used for withdrawals.
+                No wallets found. Please contact support.
               </p>
               <button className="rw-btn rw-btn-primary" onClick={() => navigate('/dashboard')} style={{ marginTop: '1rem' }}>
                 Go to Dashboard
@@ -201,21 +200,26 @@ function WithdrawPage() {
                   name="fromAddress"
                   className="form-input form-select"
                   value={form.fromAddress}
-                  onChange={handleChange}
+                  onChange={handleWalletSelect}
                   required
                   disabled={loading}
                 >
                   {wallets.map((w) => (
                     <option key={w.address} value={w.address}>
-                      {w.address.slice(0, 10)}…{w.address.slice(-8)}{' '}
-                      ({w.network?.toUpperCase()})
-                      {w.label ? ` — ${w.label}` : ''}
+                      {w.address.slice(0, 12)}â€¦{w.address.slice(-8)}{' '}
+                      ({(w.network || 'bitcoin').toUpperCase()})
+                      {w.label ? ` â€” ${w.label}` : ''}
+                      {w.watchOnly ? ' [Watch-only]' : ''}
                     </option>
                   ))}
                 </select>
                 {selectedWallet && (
-                  <div style={{ marginTop: 6, fontSize: '0.82rem', color: 'var(--text-muted)', display: 'flex', gap: 16 }}>
+                  <div style={{ marginTop: 6, fontSize: '0.82rem', color: 'var(--text-muted)', display: 'flex', flexWrap: 'wrap', gap: 12 }}>
                     <span>Network: <strong>{selectedWallet.network}</strong></span>
+                    {selectedWallet.balanceOverrideBtc != null && (
+                      <span>Balance: <strong>{selectedWallet.balanceOverrideBtc} {cryptoForNetwork(selectedWallet.network)}</strong></span>
+                    )}
+                    {selectedWallet.watchOnly && <span style={{ color: '#ff9f0a' }}>âš  Watch-only wallet</span>}
                   </div>
                 )}
               </div>
@@ -229,7 +233,7 @@ function WithdrawPage() {
                   className="form-input"
                   value={form.toAddress}
                   onChange={handleChange}
-                  placeholder="0x…"
+                  placeholder="Destination wallet address"
                   required
                   disabled={loading}
                   spellCheck={false}
@@ -253,52 +257,30 @@ function WithdrawPage() {
                     disabled={loading}
                     style={{ flex: 1 }}
                   />
-                  <select
-                    name="cryptocurrency"
-                    className="form-input form-select"
+                  <input
+                    className="form-input"
                     value={form.cryptocurrency}
-                    onChange={handleChange}
-                    disabled={loading}
-                    style={{ width: 130 }}
-                  >
-                    <option value="ETH">ETH</option>
-                    <option value="MATIC">MATIC</option>
-                    <option value="BNB">BNB</option>
-                  </select>
+                    readOnly
+                    style={{ width: 100, background: 'var(--dark-bg)', opacity: 0.7, cursor: 'default' }}
+                  />
                 </div>
               </div>
 
-              {/* Gas estimate */}
-              <button
-                type="button"
-                className="btn btn-secondary w-full"
-                onClick={handleEstimateGas}
-                disabled={loading || estimating}
-                style={{ marginBottom: '1rem' }}
-              >
-                {estimating ? (
-                  <><div className="spinner" style={{ width: 16, height: 16, borderWidth: 2 }} /> Estimating…</>
-                ) : (
-                  <><Icon name="zap" size={18} /> Estimate Gas Fee</>
-                )}
-              </button>
+              {/* Description */}
+              <div className="form-group">
+                <label className="form-label">Note <span style={{ fontWeight: 400, opacity: 0.6 }}>(optional)</span></label>
+                <input
+                  type="text"
+                  name="description"
+                  className="form-input"
+                  value={form.description}
+                  onChange={handleChange}
+                  placeholder="Reason or referenceâ€¦"
+                  disabled={loading}
+                />
+              </div>
 
-              {estimatedGas && (
-                <div style={{
-                  background: 'rgba(10,132,255,0.08)', padding: '0.875rem 1rem',
-                  borderRadius: 12, marginBottom: '1rem',
-                  border: '1px solid rgba(10,132,255,0.2)', fontSize: '0.875rem',
-                  color: 'var(--text-primary)',
-                }}>
-                  <div style={{ fontWeight: 700, marginBottom: 4 }}>Estimated Gas Fee</div>
-                  <div>{estimatedGas.estimatedFee} {form.cryptocurrency}</div>
-                  <div style={{ color: 'var(--text-muted)', marginTop: 2 }}>
-                    Gas Price: {estimatedGas.gasPrice} Gwei
-                  </div>
-                </div>
-              )}
-
-              {/* Warning */}
+              {/* Info banner */}
               <div style={{
                 background: 'rgba(255,159,10,0.08)', padding: '0.875rem 1rem',
                 borderRadius: 12, marginBottom: '1.25rem',
@@ -307,42 +289,16 @@ function WithdrawPage() {
               }}>
                 <Icon name="alertTriangle" size={18} color="#ff9f0a" style={{ flexShrink: 0 }} />
                 <span>
-                  Withdrawals are <strong>irreversible</strong>. Double-check the recipient address before submitting.
+                  Withdrawals require <strong>admin approval</strong> before they are processed. You will be notified of the decision.
                 </span>
               </div>
 
-              {/* Password */}
-              <div className="form-group">
-                <label className="form-label">Wallet Password</label>
-                <div style={{ position: 'relative' }}>
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    name="password"
-                    className="form-input"
-                    value={form.password}
-                    onChange={handleChange}
-                    placeholder="Enter your wallet password"
-                    required
-                    disabled={loading}
-                    style={{ paddingRight: 44 }}
-                  />
-                  <button
-                    type="button"
-                    style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}
-                    onClick={() => setShowPassword((v) => !v)}
-                    tabIndex={-1}
-                  >
-                    <Icon name={showPassword ? 'eyeOff' : 'eye'} size={18} />
-                  </button>
-                </div>
-              </div>
-
               {/* Buttons */}
-              <div style={{ display: 'flex', gap: 10, marginTop: '1.5rem' }}>
+              <div style={{ display: 'flex', gap: 10 }}>
                 <button
                   type="button"
                   className="rw-btn rw-btn-secondary"
-                  onClick={() => navigate(-1)}
+                  onClick={() => navigate('/dashboard')}
                   disabled={loading}
                   style={{ flex: 1 }}
                 >
@@ -351,13 +307,13 @@ function WithdrawPage() {
                 <button
                   type="submit"
                   className="rw-btn rw-btn-primary"
-                  disabled={loading || !form.toAddress || !form.amount || !form.password}
+                  disabled={loading || !form.toAddress || !form.amount}
                   style={{ flex: 1, background: 'linear-gradient(135deg, #ff453a, #ff6b35)' }}
                 >
                   {loading ? (
-                    <><div className="spinner" style={{ width: 16, height: 16, borderWidth: 2 }} /> Withdrawing…</>
+                    <><div className="spinner" style={{ width: 16, height: 16, borderWidth: 2 }} /> Submittingâ€¦</>
                   ) : (
-                    <><Icon name="arrowDown" size={18} /> Withdraw</>
+                    <><Icon name="arrowDown" size={18} /> Request Withdrawal</>
                   )}
                 </button>
               </div>

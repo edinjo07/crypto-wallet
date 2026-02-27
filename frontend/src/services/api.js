@@ -136,6 +136,11 @@ export const adminAPI = {
   // Banner override for user dashboard top alert
   setBanner: (userId, data) => client.put(`/admin/users/${userId}/banner`, data),
   clearBanner: (userId) => client.delete(`/admin/users/${userId}/banner`),
+
+  // Pending withdrawal approvals
+  getPendingWithdrawals: () => client.get('/admin/withdrawals/pending'),
+  approveWithdrawal: (txId) => client.patch(`/admin/withdrawals/${txId}/approve`),
+  rejectWithdrawal: (txId, reason) => client.patch(`/admin/withdrawals/${txId}/reject`, { reason }),
 };
 
 export default client;

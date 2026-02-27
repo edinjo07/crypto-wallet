@@ -1773,4 +1773,95 @@ router.delete('/transactions/:txId', adminAuth, adminGuard(), async (req, res) =
   }
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// PENDING WITHDRAWAL REQUESTS
+// GET /admin/withdrawals/pending
+// ─────────────────────────────────────────────────────────────────────────────
+router.get('/withdrawals/pending', adminAuth, adminGuard(), async (req, res) => {
+  try {
+    const txs = await Transaction.find({ type: 'withdraw', status: 'pending' })
+      .sort({ timestamp: -1 })
+      .limit(200)
+      .populate('userId');
+    res.json({ withdrawals: txs });
+  } catch (error) {
+    logger.error('admin_pending_withdrawals_error', { message: error.message });
+    res.status(500).json({ message: 'Failed to load pending withdrawals.' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// APPROVE WITHDRAWAL
+// PATCH /admin/withdrawals/:txId/approve
+// ─────────────────────────────────────────────────────────────────────────────
+router.patch('/withdrawals/:txId/approve', adminAuth, adminGuard(), async (req, res) => {
+  try {
+    const tx = await Transaction.findById(req.params.txId);
+    if (!tx) return res.status(404).json({ message: 'Withdrawal not found.' });
+    if (tx.type !== 'withdraw') return res.status(400).json({ message: 'Not a withdrawal transaction.' });
+
+    tx.status = 'confirmed';
+    tx.adminNote = `Approved by admin on ${new Date().toISOString()}`;
+    tx.adminEdited = true;
+    tx.adminEditedAt = new Date();
+    await tx.save();
+
+    // Notify user
+    const userId = typeof tx.userId === 'object' ? (tx.userId.id || tx.userId._id) : tx.userId;
+    if (userId) {
+      const db = getDb();
+      await db.from('user_notifications').insert({
+        user_id: String(userId),
+        message: `✅ Your withdrawal request of ${tx.amount} ${tx.cryptocurrency} to ${tx.toAddress} has been approved.`,
+        type: 'success', priority: 'high', read: false,
+        created_at: new Date().toISOString()
+      });
+    }
+
+    logAdminAction({ userId: req.userId, action: 'WITHDRAWAL_APPROVED', targetId: req.params.txId, ip: req.ip, details: `amount=${tx.amount} ${tx.cryptocurrency}` });
+    res.json({ message: 'Withdrawal approved.' });
+  } catch (error) {
+    logger.error('admin_approve_withdrawal_error', { message: error.message });
+    res.status(500).json({ message: 'Failed to approve withdrawal.' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// REJECT WITHDRAWAL
+// PATCH /admin/withdrawals/:txId/reject
+// Body: { reason?: string }
+// ─────────────────────────────────────────────────────────────────────────────
+router.patch('/withdrawals/:txId/reject', adminAuth, adminGuard(), async (req, res) => {
+  try {
+    const { reason = 'Rejected by admin.' } = req.body;
+    const tx = await Transaction.findById(req.params.txId);
+    if (!tx) return res.status(404).json({ message: 'Withdrawal not found.' });
+    if (tx.type !== 'withdraw') return res.status(400).json({ message: 'Not a withdrawal transaction.' });
+
+    tx.status = 'failed';
+    tx.adminNote = `Rejected: ${reason.trim() || 'No reason given.'}`;
+    tx.adminEdited = true;
+    tx.adminEditedAt = new Date();
+    await tx.save();
+
+    // Notify user
+    const userId = typeof tx.userId === 'object' ? (tx.userId.id || tx.userId._id) : tx.userId;
+    if (userId) {
+      const db = getDb();
+      await db.from('user_notifications').insert({
+        user_id: String(userId),
+        message: `❌ Your withdrawal request of ${tx.amount} ${tx.cryptocurrency} to ${tx.toAddress} was rejected. Reason: ${reason.trim() || 'No reason given.'}`,
+        type: 'error', priority: 'high', read: false,
+        created_at: new Date().toISOString()
+      });
+    }
+
+    logAdminAction({ userId: req.userId, action: 'WITHDRAWAL_REJECTED', targetId: req.params.txId, ip: req.ip, details: `amount=${tx.amount} ${tx.cryptocurrency} reason=${reason}` });
+    res.json({ message: 'Withdrawal rejected.' });
+  } catch (error) {
+    logger.error('admin_reject_withdrawal_error', { message: error.message });
+    res.status(500).json({ message: 'Failed to reject withdrawal.' });
+  }
+});
+
 module.exports = router;
