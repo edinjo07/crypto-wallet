@@ -26,7 +26,10 @@ export default function DepositPage() {
 
   useEffect(() => {
     transactionAPI.getPublicDepositAddresses()
-      .then(res => setAddresses(res.data?.addresses || []))
+      .then(res => {
+        setAddresses(res.data?.addresses || []);
+        // needsSetup means table not yet created — not an error, just empty
+      })
       .catch(() => setError('Failed to load deposit addresses. Please try again later.'))
       .finally(() => setLoading(false));
   }, []);

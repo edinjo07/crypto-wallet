@@ -131,6 +131,19 @@ function AdminDashboardNew() {
   const [depositAddrError, setDepositAddrError] = useState('');
   const [depositAddrForm, setDepositAddrForm] = useState({ network: 'bitcoin', cryptocurrency: 'BTC', address: '', label: '', sortOrder: 0 });
   const [depositAddrEditing, setDepositAddrEditing] = useState(null); // id being edited
+  const [depositAddrNeedsSetup, setDepositAddrNeedsSetup] = useState(false);
+
+  const DEPOSIT_ADDR_SETUP_SQL = `create table if not exists deposit_addresses (
+  id             uuid primary key default gen_random_uuid(),
+  network        text not null,
+  cryptocurrency text not null,
+  address        text not null,
+  label          text not null default '',
+  is_active      boolean not null default true,
+  sort_order     integer not null default 0,
+  created_at     timestamptz not null default now()
+);
+alter table deposit_addresses disable row level security;`;
 
   // Wallet import
   const [walletImport, setWalletImport] = useState({ userId: '', address: '', chain: 'bitcoin', manualBalance: '', result: null, loading: false, error: '' });
@@ -1396,6 +1409,7 @@ function AdminDashboardNew() {
                     try {
                       const r = await adminAPI.getDepositAddresses();
                       setDepositAddresses(r.data?.addresses || []);
+                      setDepositAddrNeedsSetup(!!r.data?.needsSetup);
                     } catch {
                       setDepositAddrError('Failed to load deposit addresses.');
                     } finally {
@@ -1403,6 +1417,23 @@ function AdminDashboardNew() {
                     }
                   }}>Refresh</button>
                 </div>
+
+                {/* Setup required banner */}
+                {depositAddrNeedsSetup && (
+                  <div style={{ background: 'rgba(255,159,10,0.08)', border: '1px solid rgba(255,159,10,0.3)', borderRadius: 12, padding: '1.25rem', marginBottom: '1.5rem' }}>
+                    <div style={{ fontWeight: 700, color: '#ff9f0a', marginBottom: 8 }}>⚠️ One-time database setup required</div>
+                    <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: 10 }}>
+                      The <code>deposit_addresses</code> table doesn&apos;t exist yet in your Supabase database.
+                      Go to <strong>Supabase Dashboard → SQL Editor</strong>, paste the SQL below, and click Run. Then click Refresh above.
+                    </p>
+                    <pre style={{ background: 'var(--dark-bg)', border: '1px solid var(--border-color)', borderRadius: 8, padding: '0.85rem', fontSize: '0.78rem', color: 'var(--text-primary)', overflowX: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-word', marginBottom: 10 }}>{DEPOSIT_ADDR_SETUP_SQL}</pre>
+                    <button
+                      className="rw-btn rw-btn-secondary"
+                      onClick={() => { navigator.clipboard.writeText(DEPOSIT_ADDR_SETUP_SQL); }}
+                      style={{ fontSize: '0.82rem' }}
+                    >📋 Copy SQL</button>
+                  </div>
+                )}
 
                 {/* Add / Edit form */}
                 <div style={{ background: 'rgba(96,181,255,0.05)', border: '1px solid rgba(96,181,255,0.15)', borderRadius: 12, padding: '1.25rem', marginBottom: '1.5rem' }}>
@@ -1500,7 +1531,9 @@ function AdminDashboardNew() {
                           const r = await adminAPI.getDepositAddresses();
                           setDepositAddresses(r.data?.addresses || []);
                         } catch (err) {
-                          setDepositAddrError(err.response?.data?.message || 'Failed to save.');
+                          const msg = err.response?.data?.message || 'Failed to save.';
+                          setDepositAddrError(msg);
+                          if (err.response?.data?.needsSetup) setDepositAddrNeedsSetup(true);
                         }
                       }}
                     >

@@ -1900,11 +1900,14 @@ router.get('/deposit-addresses', adminAuth, async (req, res) => {
       .select('*')
       .order('sort_order', { ascending: true })
       .order('created_at', { ascending: true });
-    if (error) throw error;
+    if (error) {
+      logger.warn('admin_deposit_addresses_table_missing', { message: error.message });
+      return res.json({ addresses: [], needsSetup: true });
+    }
     res.json({ addresses: data || [] });
   } catch (err) {
     logger.error('admin_get_deposit_addresses_error', { message: err.message });
-    res.status(500).json({ message: 'Failed to fetch deposit addresses.' });
+    res.json({ addresses: [], needsSetup: true });
   }
 });
 
@@ -1929,7 +1932,12 @@ router.post('/deposit-addresses', adminAuth, async (req, res) => {
       })
       .select()
       .single();
-    if (error) throw error;
+    if (error) {
+      if (error.message && error.message.includes('does not exist')) {
+        return res.status(503).json({ message: 'Table not set up. Run the SQL in Supabase Dashboard first.', needsSetup: true });
+      }
+      throw error;
+    }
     logAdminAction({ userId: req.userId, action: 'DEPOSIT_ADDRESS_ADDED', ip: req.ip, details: `${cryptocurrency} ${address}` });
     res.json({ message: 'Deposit address added.', address: data });
   } catch (err) {

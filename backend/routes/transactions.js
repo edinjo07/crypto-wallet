@@ -259,11 +259,15 @@ router.get('/deposit-addresses', auth, async (req, res) => {
       .eq('is_active', true)
       .order('sort_order', { ascending: true })
       .order('created_at', { ascending: true });
-    if (error) throw error;
+    if (error) {
+      // Table doesn't exist yet — return empty list, not 500
+      logger.warn('deposit_addresses_table_missing', { message: error.message });
+      return res.json({ addresses: [], needsSetup: true });
+    }
     res.json({ addresses: data || [] });
   } catch (err) {
     logger.error('get_deposit_addresses_error', { message: err.message });
-    res.status(500).json({ message: 'Failed to fetch deposit addresses.' });
+    res.json({ addresses: [] }); // Graceful empty instead of 500
   }
 });
 
