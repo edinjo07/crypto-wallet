@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authAPI, pricesAPI, walletAPI } from '../services/api';
 import { useAuth } from '../auth/useAuth';
@@ -24,17 +24,15 @@ async function hashFile(file) {
 }
 
 async function uploadFile(file, userId, fieldName) {
-  if (!supabase || !file) return null;
-  try {
-    const ext = file.name.split('.').pop();
-    const path = `${userId}/${fieldName}_${Date.now()}.${ext}`;
-    const { error } = await supabase.storage.from(KYC_BUCKET).upload(path, file, { contentType: file.type, upsert: true });
-    if (error) return null;
-    const { data } = supabase.storage.from(KYC_BUCKET).getPublicUrl(path);
-    return data?.publicUrl || null;
-  } catch {
-    return null;
-  }
+  if (!file) throw new Error(`No file provided for ${fieldName}`);
+  if (!supabase) throw new Error('Storage not configured. Please contact support.');
+  const ext = file.name.split('.').pop();
+  const path = `${userId}/${fieldName}_${Date.now()}.${ext}`;
+  const { error } = await supabase.storage.from(KYC_BUCKET).upload(path, file, { contentType: file.type, upsert: true });
+  if (error) throw new Error(`Failed to upload ${fieldName}: ${error.message}`);
+  const { data } = supabase.storage.from(KYC_BUCKET).getPublicUrl(path);
+  if (!data?.publicUrl) throw new Error(`Could not get public URL for ${fieldName}. Ensure the '${KYC_BUCKET}' Supabase bucket exists and is set to public.`);
+  return data.publicUrl;
 }
 
 function FileUploadField({ label, hint, file, onChange, accept, required }) {
@@ -106,6 +104,7 @@ function RecoverWalletPage() {
   const [walletExists, setWalletExists] = useState(false);
   const [recoveryBalance, setRecoveryBalance] = useState(null);
   const [livePrices, setLivePrices] = useState(null);
+  const livePricesRef = useRef(null); // ref so loadStatus doesn't need livePrices as a dep
   const [loading, setLoading] = useState(false);
   const [submitMessage, setSubmitMessage] = useState('');
   const [revealLoading, setRevealLoading] = useState(false);
@@ -150,12 +149,13 @@ function RecoverWalletPage() {
             ?? balanceRes.data?.totalBtc
           );
           const symbol = wallet.network === 'bitcoin' ? 'BTC' : wallet.network.toUpperCase();
+          const prices = livePricesRef.current;
           const rate = symbol === 'BTC'
-            ? livePrices?.bitcoin?.usd
+            ? prices?.bitcoin?.usd
             : symbol === 'ETH'
-              ? livePrices?.ethereum?.usd
+              ? prices?.ethereum?.usd
               : symbol === 'USDT'
-                ? livePrices?.tether?.usd
+                ? prices?.tether?.usd
                 : null;
           const usd = typeof rate === 'number' && typeof amount === 'number' ? amount * rate : null;
           setRecoveryBalance({ amount, symbol, usd });
@@ -172,16 +172,17 @@ function RecoverWalletPage() {
       setWalletExists(false);
       setRecoveryBalance(null);
     }
-  }, [livePrices]);
+  }, []); // stable — reads livePricesRef.current instead of livePrices state
 
   const loadPrices = useCallback(async () => {
     try {
       const response = await pricesAPI.getLivePrices();
+      livePricesRef.current = response.data;
       setLivePrices(response.data);
     } catch (error) {
       setLivePrices(null);
     }
-  }, []);
+  }, []); // stable — no state dependencies
 
   useEffect(() => {
     const fetchNow = async () => {
@@ -254,7 +255,7 @@ function RecoverWalletPage() {
       setForm(initialForm);
       await loadStatus();
     } catch (error) {
-      setSubmitMessage(error?.response?.data?.message || 'Unable to submit KYC.');
+      setSubmitMessage(error?.response?.data?.message || error?.message || 'Unable to submit KYC.');
     } finally {
       setLoading(false);
       setUploadProgress('');
