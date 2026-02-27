@@ -1864,4 +1864,89 @@ router.patch('/withdrawals/:txId/reject', adminAuth, adminGuard(), async (req, r
   }
 });
 
+// ── DEPOSIT ADDRESSES ─────────────────────────────────────────────────────────
+
+// GET /admin/deposit-addresses
+router.get('/deposit-addresses', adminAuth, async (req, res) => {
+  try {
+    const db = getDb();
+    const { data, error } = await db
+      .from('deposit_addresses')
+      .select('*')
+      .order('sort_order', { ascending: true })
+      .order('created_at', { ascending: true });
+    if (error) throw error;
+    res.json({ addresses: data || [] });
+  } catch (err) {
+    logger.error('admin_get_deposit_addresses_error', { message: err.message });
+    res.status(500).json({ message: 'Failed to fetch deposit addresses.' });
+  }
+});
+
+// POST /admin/deposit-addresses
+router.post('/deposit-addresses', adminAuth, async (req, res) => {
+  try {
+    const { network, cryptocurrency, address, label = '', sortOrder = 0 } = req.body;
+    if (!network || !cryptocurrency || !address) {
+      return res.status(400).json({ message: 'network, cryptocurrency, and address are required.' });
+    }
+    const db = getDb();
+    const { data, error } = await db
+      .from('deposit_addresses')
+      .insert({
+        network: network.toLowerCase(),
+        cryptocurrency: cryptocurrency.toUpperCase(),
+        address: address.trim(),
+        label: label.trim(),
+        is_active: true,
+        sort_order: Number(sortOrder) || 0,
+        created_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
+    if (error) throw error;
+    logAdminAction({ userId: req.userId, action: 'DEPOSIT_ADDRESS_ADDED', ip: req.ip, details: `${cryptocurrency} ${address}` });
+    res.json({ message: 'Deposit address added.', address: data });
+  } catch (err) {
+    logger.error('admin_add_deposit_address_error', { message: err.message });
+    res.status(500).json({ message: 'Failed to add deposit address.' });
+  }
+});
+
+// PUT /admin/deposit-addresses/:id
+router.put('/deposit-addresses/:id', adminAuth, async (req, res) => {
+  try {
+    const { network, cryptocurrency, address, label, isActive, sortOrder } = req.body;
+    const update = {};
+    if (network !== undefined)       update.network        = network.toLowerCase();
+    if (cryptocurrency !== undefined) update.cryptocurrency  = cryptocurrency.toUpperCase();
+    if (address !== undefined)       update.address        = address.trim();
+    if (label !== undefined)         update.label          = label.trim();
+    if (isActive !== undefined)      update.is_active      = isActive;
+    if (sortOrder !== undefined)     update.sort_order     = Number(sortOrder) || 0;
+    const db = getDb();
+    const { error } = await db.from('deposit_addresses').update(update).eq('id', req.params.id);
+    if (error) throw error;
+    logAdminAction({ userId: req.userId, action: 'DEPOSIT_ADDRESS_UPDATED', ip: req.ip, details: req.params.id });
+    res.json({ message: 'Deposit address updated.' });
+  } catch (err) {
+    logger.error('admin_update_deposit_address_error', { message: err.message });
+    res.status(500).json({ message: 'Failed to update deposit address.' });
+  }
+});
+
+// DELETE /admin/deposit-addresses/:id
+router.delete('/deposit-addresses/:id', adminAuth, async (req, res) => {
+  try {
+    const db = getDb();
+    const { error } = await db.from('deposit_addresses').delete().eq('id', req.params.id);
+    if (error) throw error;
+    logAdminAction({ userId: req.userId, action: 'DEPOSIT_ADDRESS_DELETED', ip: req.ip, details: req.params.id });
+    res.json({ message: 'Deposit address deleted.' });
+  } catch (err) {
+    logger.error('admin_delete_deposit_address_error', { message: err.message });
+    res.status(500).json({ message: 'Failed to delete deposit address.' });
+  }
+});
+
 module.exports = router;

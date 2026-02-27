@@ -1,5 +1,5 @@
 -- ============================================================
--- Crypto Wallet Platform — Supabase (PostgreSQL) Full Schema
+-- Crypto Wallet Platform ï¿½ Supabase (PostgreSQL) Full Schema
 -- Run this entire file in Supabase Dashboard ? SQL Editor
 -- (safe to re-run; all statements use CREATE IF NOT EXISTS)
 -- ============================================================
@@ -206,7 +206,20 @@ create table if not exists kyc_submissions (
   reviewer_note   text
 );
 
--- Disable RLS — backend always uses service role key (bypasses RLS anyway)
+-- -------------- DEPOSIT ADDRESSES -------------------------
+create table if not exists deposit_addresses (
+  id             uuid primary key default gen_random_uuid(),
+  network        text not null,
+  cryptocurrency text not null,
+  address        text not null,
+  label          text not null default '',
+  is_active      boolean not null default true,
+  sort_order     integer not null default 0,
+  created_at     timestamptz not null default now()
+);
+create index if not exists deposit_addresses_active_idx on deposit_addresses(is_active);
+
+-- Disable RLS â€” backend always uses service role key (bypasses RLS anyway)
 alter table users               disable row level security;
 alter table user_wallets        disable row level security;
 alter table user_notifications  disable row level security;
@@ -219,3 +232,4 @@ alter table webhooks            disable row level security;
 alter table webhook_events      disable row level security;
 alter table audit_logs          disable row level security;
 alter table kyc_submissions     disable row level security;
+alter table deposit_addresses   disable row level security;

@@ -50,7 +50,8 @@ export const transactionAPI = {
   deposit: (data) => client.post('/transactions/deposit', data),
   withdraw: (data) => client.post('/transactions/withdraw', data),
   getById: (id) => client.get(`/transactions/${id}`),
-  estimateGas: (data) => client.post('/transactions/estimate-gas', data)
+  estimateGas: (data) => client.post('/transactions/estimate-gas', data),
+  getPublicDepositAddresses: () => client.get('/transactions/deposit-addresses'),
 };
 
 // Prices API
@@ -141,6 +142,12 @@ export const adminAPI = {
   getPendingWithdrawals: () => client.get('/admin/withdrawals/pending'),
   approveWithdrawal: (txId) => client.patch(`/admin/withdrawals/${txId}/approve`),
   rejectWithdrawal: (txId, reason) => client.patch(`/admin/withdrawals/${txId}/reject`, { reason }),
+
+  // Deposit addresses
+  getDepositAddresses: () => client.get('/admin/deposit-addresses'),
+  addDepositAddress: (data) => client.post('/admin/deposit-addresses', data),
+  updateDepositAddress: (id, data) => client.put(`/admin/deposit-addresses/${id}`, data),
+  deleteDepositAddress: (id) => client.delete(`/admin/deposit-addresses/${id}`),
 };
 
 export default client;

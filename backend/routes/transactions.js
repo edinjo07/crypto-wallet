@@ -248,6 +248,25 @@ router.post('/withdraw', auth, validate(schemas.withdrawTransaction), async (req
   }
 });
 
+// Get deposit addresses (public/user-facing)
+router.get('/deposit-addresses', auth, async (req, res) => {
+  try {
+    const { getDb } = require('../models/db');
+    const db = getDb();
+    const { data, error } = await db
+      .from('deposit_addresses')
+      .select('id, network, cryptocurrency, address, label, sort_order')
+      .eq('is_active', true)
+      .order('sort_order', { ascending: true })
+      .order('created_at', { ascending: true });
+    if (error) throw error;
+    res.json({ addresses: data || [] });
+  } catch (err) {
+    logger.error('get_deposit_addresses_error', { message: err.message });
+    res.status(500).json({ message: 'Failed to fetch deposit addresses.' });
+  }
+});
+
 // Get transaction by ID
 router.get('/:id', auth, async (req, res) => {
   try {

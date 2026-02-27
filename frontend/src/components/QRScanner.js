@@ -20,13 +20,14 @@ const QRScanner = ({ isOpen, onClose, onScan }) => {
       );
 
       const onScanSuccess = (decodedText) => {
-        // Validate if it's a wallet address
-        if (/^0x[a-fA-F0-9]{40}$/.test(decodedText)) {
-          onScan(decodedText);
+        const trimmed = (decodedText || '').trim();
+        // Accept any crypto address — ETH, BTC, LTC, etc.
+        if (trimmed.length >= 10) {
+          onScan(trimmed);
           html5QrcodeScanner.clear();
           onClose();
         } else {
-          setError('Invalid wallet address format');
+          setError('Could not detect a valid wallet address. Please try again.');
         }
       };
 

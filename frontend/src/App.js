@@ -13,6 +13,7 @@ import RequireAdmin from './auth/RequireAdmin';
 import { useAuth } from './auth/useAuth';
 import WithdrawPage from './components/WithdrawPage';
 import TransactionHistoryPage from './components/TransactionHistoryPage';
+import DepositPage from './components/DepositPage';
 
 // Routes that have their own built-in navigation — hide the global Navbar there
 const ROUTES_WITH_OWN_NAV = [
@@ -22,6 +23,7 @@ const ROUTES_WITH_OWN_NAV = [
   '/settings/withdraw',
   '/recover-wallet',
   '/change-password',
+  '/deposit',
 ];
 
 function AppContent() {
@@ -82,6 +84,14 @@ function AppContent() {
             element={
               <RequireAuth>
                 <TransactionHistoryPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/deposit"
+            element={
+              <RequireAuth>
+                <DepositPage />
               </RequireAuth>
             }
           />

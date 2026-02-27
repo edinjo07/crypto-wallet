@@ -1,6 +1,7 @@
 import React, { useMemo, useRef, useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { walletAPI, pricesAPI } from '../services/api';
+import QRScanner from './QRScanner';
 import SendModal from './SendModal';
 import CreateWalletModal from './CreateWalletModal';
 import PriceChart from './PriceChart';
@@ -732,6 +733,12 @@ function Dashboard() {
                 </button>
                 <button
                   className="rw-btn rw-btn-secondary"
+                  onClick={() => navigate('/deposit')}
+                >
+                  Deposit
+                </button>
+                <button
+                  className="rw-btn rw-btn-secondary"
                   onClick={() => setShowQRScanner(true)}
                 >
                   Scan QR
@@ -806,15 +813,14 @@ function Dashboard() {
         />
       )}
 
-      {showQRScanner && (
-        <QRScannerModal
-          onClose={() => setShowQRScanner(false)}
-          onScan={() => {
-            setShowQRScanner(false);
-            setShowSendModal(true);
-          }}
-        />
-      )}
+      <QRScanner
+        isOpen={showQRScanner}
+        onClose={() => setShowQRScanner(false)}
+        onScan={(address) => {
+          setShowQRScanner(false);
+          setShowSendModal(true);
+        }}
+      />
 
       {showTokenManagement && selectedWalletForTokens && (
         <TokenManagement
@@ -825,57 +831,6 @@ function Dashboard() {
           }}
         />
       )}
-    </div>
-  );
-}
-
-function QRScannerModal({ onClose, onScan }) {
-  return (
-    <div className="modal" onClick={onClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '480px' }}>
-        <div className="modal-header">
-          <h2 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <Icon name="qrCode" size={28} color="var(--primary-blue)" />
-            QR Code Scanner
-          </h2>
-          <button className="close-btn" onClick={onClose}>×</button>
-        </div>
-        
-        <div style={{
-          padding: '3rem 2rem',
-          textAlign: 'center',
-          background: 'var(--dark-bg)',
-          borderRadius: '16px',
-          border: '2px dashed var(--border-color)',
-          marginBottom: '1.5rem'
-        }}>
-          <div style={{ marginBottom: '1rem', animation: 'pulse 2s ease-in-out infinite', display: 'flex', justifyContent: 'center' }}>
-            <Icon name="qrCode" size={64} color="var(--primary-blue)" />
-          </div>
-          <p style={{ color: 'var(--text-secondary)', marginBottom: '1rem' }}>QR Scanner requires camera access</p>
-          <button className="btn btn-primary" onClick={() => {
-            alert('Camera access would be requested here. For demo, manually enter address.');
-            onClose();
-          }}>
-            <Icon name="qrCode" size={18} /> Enable Camera
-          </button>
-        </div>
-
-        <div style={{
-          padding: '1rem',
-          background: 'rgba(96, 181, 255, 0.1)',
-          borderRadius: '12px',
-          border: '1px solid rgba(96, 181, 255, 0.2)',
-          fontSize: '0.85rem',
-          color: 'var(--text-secondary)',
-          lineHeight: '1.6'
-        }}>
-          <strong style={{ color: 'var(--primary-blue)', display: 'block', marginBottom: '0.5rem' }}>
-            <Icon name="infoCircle" size={16} /> How it works
-          </strong>
-          Point your camera at a QR code containing a wallet address. The scanner will automatically detect and extract the address for sending transactions.
-        </div>
-      </div>
     </div>
   );
 }
