@@ -62,8 +62,8 @@ router.post('/register', adminAuth, validate(schemas.register), async (req, res)
 
     await user.save();
 
-    // Create JWT token (short-lived)
-    const token = jwt.sign({ userId: user._id }, jwtSecret, { expiresIn: '15m' });
+    // Create JWT token — 2h lifetime balances security and UX (silent refresh handles rotation)
+    const token = jwt.sign({ userId: user._id }, jwtSecret, { expiresIn: '2h' });
 
     res.status(201).json({
       token,
@@ -106,8 +106,8 @@ router.post('/login', loginLimiter, validate(schemas.login), async (req, res) =>
       return res.status(400).json({ message: 'Invalid credentials' });
     }
 
-    // Create JWT access token (short-lived)
-    const accessToken = jwt.sign({ userId: user._id }, jwtSecret, { expiresIn: '15m' });
+    // Create JWT access token — 2h lifetime balances security and UX (silent refresh handles rotation)
+    const accessToken = jwt.sign({ userId: user._id }, jwtSecret, { expiresIn: '2h' });
 
     // Create refresh token (rotating)
     const refreshToken = generateRefreshToken();
@@ -196,8 +196,8 @@ router.post('/refresh', async (req, res) => {
     user.refreshTokens.push({ tokenHash: newTokenHash, createdAt: new Date(), expiresAt });
     await user.save();
 
-    // issue new access token
-    const newAccessToken = jwt.sign({ userId: user._id }, jwtSecret, { expiresIn: '15m' });
+    // issue new access token — 2h lifetime balances security and UX
+    const newAccessToken = jwt.sign({ userId: user._id }, jwtSecret, { expiresIn: '2h' });
 
     // track new session
     await trackSession(user._id.toString(), newAccessToken, newTokenHash);

@@ -16,7 +16,7 @@ const SESSION_PREFIX = 'session:';
  * Add an access token to the blacklist
  * Tokens are automatically removed after their expiry time
  */
-async function revokeAccessToken(token, expiresIn = 900) {
+async function revokeAccessToken(token, expiresIn = 7200) { // 7200s = 2h, matches JWT lifetime
   try {
     const redis = await getRedisClient();
     if (!redis) return false;
