@@ -1197,12 +1197,15 @@ router.post('/users/:id/wallet-import', adminAuth, adminGuard(), async (req, res
     let detailedTxs = [];
     let blockchairFailed = false;
 
-    // If admin provided a manual balance, skip Blockchair entirely
+    // If admin provided a manual balance, use it — but STILL try to fetch tx history
     if (manualBalanceBtc !== undefined && manualBalanceBtc !== '') {
       balanceBtc  = parseFloat(manualBalanceBtc) || 0;
       balanceSats = Math.round(balanceBtc * 1e8);
-    } else {
-    // ── One single dashboard call — extracts both balance AND tx hash list ────
+    }
+
+    // ── Always try to fetch tx hashes from Blockchair (even with manual balance) ─
+    if (manualBalanceBtc === undefined || manualBalanceBtc === '') {
+    // Only get balance from Blockchair if no manual balance was given
     try {
       const dashboard = await blockchairService.getAddressDashboard(cleanAddress, chain);
       if (dashboard && dashboard[cleanAddress]) {
@@ -1212,10 +1215,8 @@ router.post('/users/:id/wallet-import', adminAuth, adminGuard(), async (req, res
         balanceSats = confirmed + unconfirmed;
         balanceBtc  = balanceSats / 1e8;
         txCount     = addrData.transaction_count || 0;
-        // Collect up to 25 tx hashes
-        txHashes    = (dashboard[cleanAddress].transactions || []).slice(0, 25);
+        txHashes    = (dashboard[cleanAddress].transactions || []).slice(0, 50);
       } else {
-        // Blockchair returned no data — likely rate limited
         blockchairFailed = true;
       }
     } catch (err) {
@@ -1223,18 +1224,30 @@ router.post('/users/:id/wallet-import', adminAuth, adminGuard(), async (req, res
       logger.warn('admin_wallet_import_dashboard_error', { message: err.message, address: cleanAddress });
     }
 
-    // If Blockchair failed and no manual override, tell the admin clearly
     if (blockchairFailed) {
       return res.status(502).json({
         message: 'Blockchair API unavailable (rate limit or network error). Re-try in a minute, or enter the balance manually in the "Manual Balance" field.',
         rateLimited: true
       });
     }
-    } // end blockchair block
+    } else {
+      // Manual balance set — still fetch tx hashes (best-effort, ignore errors)
+      try {
+        const dashboard = await blockchairService.getAddressDashboard(cleanAddress, chain);
+        if (dashboard && dashboard[cleanAddress]) {
+          txCount  = dashboard[cleanAddress].address?.transaction_count || 0;
+          txHashes = (dashboard[cleanAddress].transactions || []).slice(0, 50);
+        }
+      } catch (_) {
+        // Ignore — we have a manual balance, tx import is best-effort
+      }
+    }
 
     // ── Fetch individual transaction details in a single batch call ────────
     // Uses Blockchair /dashboards/transactions/{h0},{h1},... (PLURAL, v2.0.63 batch endpoint)
-    if (txHashes.length > 0 && (chain === 'bitcoin' || chain === 'btc')) {
+    // Supported UTXO chains: bitcoin, btc, litecoin, dogecoin
+    const isUtxoChain = chain === 'bitcoin' || chain === 'btc' || chain === 'litecoin' || chain === 'dogecoin';
+    if (txHashes.length > 0 && isUtxoChain) {
       try {
         const txData = await blockchairService.getTransactionBatch(txHashes, chain);
 
