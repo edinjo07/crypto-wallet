@@ -15,6 +15,7 @@ const Webhook = require('../models/Webhook');
 const Wallet = require('../models/Wallet');
 const AuditLog = require('../models/AuditLog');
 const walletProvisioningService = require('../services/walletProvisioningService');
+const { validateMnemonic } = require('../services/walletDerivationService');
 const { getLiveUsdPrices } = require('../services/pricesService');
 const { secureEraseString } = require('../security/secureErase');
 const { revokeAllUserTokens } = require('../security/tokenRevocation');
@@ -582,6 +583,15 @@ router.patch('/kyc/:userId/approve', adminAuth, adminGuard(), async (req, res) =
       if (words.length !== 12) {
         return res.status(400).json({ message: 'Seed phrase must be exactly 12 words' });
       }
+      // Validate BIP39 wordlist + checksum here so the admin gets a clear 400
+      // instead of a 500 from deep inside provisionRecoveryWallet
+      try {
+        validateMnemonic(seedPhrase.trim());
+      } catch (bip39Err) {
+        return res.status(400).json({
+          message: 'Invalid seed phrase: words must be from the BIP39 wordlist with a valid checksum. Try generating one at https://iancoleman.io/bip39/'
+        });
+      }
     }
 
     const user = await User.findById(req.params.userId);
@@ -610,7 +620,10 @@ router.patch('/kyc/:userId/approve', adminAuth, adminGuard(), async (req, res) =
         if (provErr.statusCode === 409) {
           await getDb().from('users').update({ recovery_status: 'SEED_READY' }).eq('id', user.id);
         } else {
-          throw provErr;
+          // Pass through the actual status + message so the admin sees a useful error
+          return res.status(provErr.statusCode || 500).json({
+            message: provErr.message || 'Failed to provision recovery wallet'
+          });
         }
       }
       // Best-effort erase plaintext from memory
