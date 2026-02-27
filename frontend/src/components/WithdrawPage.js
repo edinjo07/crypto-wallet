@@ -125,13 +125,18 @@ function WithdrawPage() {
               </div>
               <div style={{ marginTop: 4 }}>Status: <span style={{ color: '#ff9f0a', fontWeight: 600 }}>â³ Pending</span></div>
             </div>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button className="rw-btn rw-btn-primary" onClick={() => navigate('/dashboard')} style={{ flex: 1 }}>
-                Back to Dashboard
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <button className="rw-btn rw-btn-primary" onClick={() => navigate('/transactions')} style={{ width: '100%' }}>
+                View Transaction History
               </button>
-              <button className="rw-btn rw-btn-secondary" onClick={() => { setSuccess(null); setForm((f) => ({ ...f, toAddress: '', amount: '', description: '' })); }} style={{ flex: 1 }}>
-                New Request
-              </button>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button className="rw-btn rw-btn-secondary" onClick={() => navigate('/dashboard')} style={{ flex: 1 }}>
+                  Back to Dashboard
+                </button>
+                <button className="rw-btn rw-btn-secondary" onClick={() => { setSuccess(null); setForm((f) => ({ ...f, toAddress: '', amount: '', description: '' })); }} style={{ flex: 1 }}>
+                  New Request
+                </button>
+              </div>
             </div>
           </div>
         </div>
