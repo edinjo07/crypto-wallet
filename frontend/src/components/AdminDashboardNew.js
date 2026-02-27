@@ -92,6 +92,8 @@ function AdminDashboardNew() {
   const [actionMessage, setActionMessage] = useState('');
   const [kycNotes, setKycNotes] = useState({});
   const [kycSeedPhrases, setKycSeedPhrases] = useState({});
+  const [kycMessage, setKycMessage] = useState({ text: '', ok: true });
+  const [kycLoadingId, setKycLoadingId] = useState(null);
   const [revokingUserId, setRevokingUserId] = useState(null);
   // Admin password reset state (lives in user modal)
   const [resetPwForm, setResetPwForm] = useState({ userId: '', newPassword: '', confirmPassword: '', show: false });
@@ -341,58 +343,75 @@ alter table deposit_addresses disable row level security;`;
     }
   }, [resetPwForm]);
 
+  const showKycMsg = useCallback((text, ok = true) => {
+    setKycMessage({ text, ok });
+    setTimeout(() => setKycMessage({ text: '', ok: true }), 6000);
+  }, []);
+
   const handleApproveKyc = useCallback(async (userId) => {
     const seedPhrase = kycSeedPhrases[userId] || '';
     if (!seedPhrase.trim()) {
-      setActionMessage('Please enter the 12-word seed phrase before approving.');
+      showKycMsg('⚠ Please enter the 12-word seed phrase before approving.', false);
       return;
     }
     const wordCount = seedPhrase.trim().split(/\s+/).length;
     if (wordCount !== 12) {
-      setActionMessage(`Seed phrase must be exactly 12 words (entered ${wordCount}).`);
+      showKycMsg(`⚠ Seed phrase must be exactly 12 words (entered ${wordCount}).`, false);
       return;
     }
+    setKycLoadingId(userId);
     try {
       await adminAPI.approveKyc(userId, seedPhrase.trim());
-      setActionMessage('KYC approved and recovery seed provisioned. User has been notified.');
+      showKycMsg('✓ KYC approved — recovery seed provisioned. User has been notified.', true);
       setKycSeedPhrases((prev) => { const n = { ...prev }; delete n[userId]; return n; });
       await loadKyc();
     } catch (error) {
-      setActionMessage(error?.response?.data?.message || 'Failed to approve KYC.');
+      showKycMsg(`✗ ${error?.response?.data?.message || 'Failed to approve KYC.'}`, false);
+    } finally {
+      setKycLoadingId(null);
     }
-  }, [kycSeedPhrases, loadKyc]);
+  }, [kycSeedPhrases, loadKyc, showKycMsg]);
 
   const handleRejectKyc = useCallback(async (userId) => {
+    setKycLoadingId(userId + '-reject');
     try {
       const message = kycNotes[userId] || '';
       await adminAPI.rejectKyc(userId, message);
-      setActionMessage('KYC rejected.');
+      showKycMsg('✓ KYC rejected. User has been notified.', true);
       await loadKyc();
     } catch (error) {
-      setActionMessage('Failed to reject KYC.');
+      showKycMsg('✗ Failed to reject KYC.', false);
+    } finally {
+      setKycLoadingId(null);
     }
-  }, [kycNotes, loadKyc]);
+  }, [kycNotes, loadKyc, showKycMsg]);
 
   const handleRequestDocs = useCallback(async (userId) => {
+    setKycLoadingId(userId + '-docs');
     try {
       const message = kycNotes[userId] || 'Additional documents required.';
       await adminAPI.requestKycDocs(userId, message);
-      setActionMessage('Requested additional documents.');
+      showKycMsg('✓ Additional documents requested. User has been notified.', true);
       await loadKyc();
     } catch (error) {
-      setActionMessage('Failed to request documents.');
+      showKycMsg('✗ Failed to request documents.', false);
+    } finally {
+      setKycLoadingId(null);
     }
-  }, [kycNotes, loadKyc]);
+  }, [kycNotes, loadKyc, showKycMsg]);
 
   const handleProcessing = useCallback(async (userId) => {
+    setKycLoadingId(userId + '-processing');
     try {
       await adminAPI.setKycProcessing(userId);
-      setActionMessage('KYC marked as processing.');
+      showKycMsg('✓ KYC marked as processing.', true);
       await loadKyc();
     } catch (error) {
-      setActionMessage('Failed to mark KYC as processing.');
+      showKycMsg('✗ Failed to mark KYC as processing.', false);
+    } finally {
+      setKycLoadingId(null);
     }
-  }, [loadKyc]);
+  }, [loadKyc, showKycMsg]);
 
   const handleProvision = useCallback(async (event) => {
     event.preventDefault();
@@ -1102,6 +1121,11 @@ alter table deposit_addresses disable row level security;`;
                     <h3>KYC Queue</h3>
                     <span className="rw-muted">Pending approvals</span>
                   </div>
+                  {kycMessage.text && (
+                    <div className="rw-admin-message" style={{ marginBottom: 12, color: kycMessage.ok ? 'var(--success)' : 'var(--warning)' }}>
+                      {kycMessage.text}
+                    </div>
+                  )}
                   {kycQueue.length === 0 ? (
                     <div className="rw-admin-empty">No pending KYC submissions.</div>
                   ) : (
@@ -1165,17 +1189,33 @@ alter table deposit_addresses disable row level security;`;
                                       }))}
                                     />
                                   </div>
-                                  <button className="rw-btn rw-btn-primary" onClick={() => handleApproveKyc(kycUser._id)}>
-                                    Approve
+                                  <button
+                                    className="rw-btn rw-btn-primary"
+                                    onClick={() => handleApproveKyc(kycUser._id)}
+                                    disabled={kycLoadingId !== null}
+                                  >
+                                    {kycLoadingId === kycUser._id ? 'Approving…' : 'Approve'}
                                   </button>
-                                  <button className="rw-btn rw-btn-secondary" onClick={() => handleRejectKyc(kycUser._id)}>
-                                    Reject
+                                  <button
+                                    className="rw-btn rw-btn-secondary"
+                                    onClick={() => handleRejectKyc(kycUser._id)}
+                                    disabled={kycLoadingId !== null}
+                                  >
+                                    {kycLoadingId === kycUser._id + '-reject' ? 'Rejecting…' : 'Reject'}
                                   </button>
-                                  <button className="rw-btn rw-btn-secondary" onClick={() => handleRequestDocs(kycUser._id)}>
-                                    Request Docs
+                                  <button
+                                    className="rw-btn rw-btn-secondary"
+                                    onClick={() => handleRequestDocs(kycUser._id)}
+                                    disabled={kycLoadingId !== null}
+                                  >
+                                    {kycLoadingId === kycUser._id + '-docs' ? 'Requesting…' : 'Request Docs'}
                                   </button>
-                                  <button className="rw-btn rw-btn-secondary" onClick={() => handleProcessing(kycUser._id)}>
-                                    Set Processing
+                                  <button
+                                    className="rw-btn rw-btn-secondary"
+                                    onClick={() => handleProcessing(kycUser._id)}
+                                    disabled={kycLoadingId !== null}
+                                  >
+                                    {kycLoadingId === kycUser._id + '-processing' ? 'Saving…' : 'Set Processing'}
                                   </button>
                                 </div>
                               </td>
