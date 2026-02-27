@@ -48,7 +48,7 @@ create table if not exists user_notifications (
   id         uuid primary key default gen_random_uuid(),
   user_id    uuid not null references users(id) on delete cascade,
   message    text not null,
-  type       text not null default 'info'   check (type in ('info','warning','error','success')),
+  type       text not null default 'info'   check (type in ('info','warning','error','success','banner')),
   priority   text not null default 'medium' check (priority in ('low','medium','high','urgent')),
   read       boolean not null default false,
   created_at timestamptz not null default now(),

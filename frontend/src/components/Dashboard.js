@@ -180,8 +180,12 @@ function Dashboard() {
     try {
       const response = await walletAPI.getNotifications();
       const allNotifs = response.data?.notifications || [];
-      const bannerNotif = allNotifs.find(n => n.type === 'banner');
-      const regularNotifs = allNotifs.filter(n => n.type !== 'banner');
+      const bannerNotif = allNotifs.find(n => {
+        try { const p = JSON.parse(n.message); return p && p.isBanner === true; } catch { return false; }
+      });
+      const regularNotifs = allNotifs.filter(n => {
+        try { const p = JSON.parse(n.message); return !(p && p.isBanner === true); } catch { return true; }
+      });
       setNotifications(regularNotifs);
       if (bannerNotif) {
         try { setBannerOverride(JSON.parse(bannerNotif.message)); } catch { setBannerOverride(null); }

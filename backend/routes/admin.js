@@ -1451,11 +1451,18 @@ router.put('/users/:id/banner', adminAuth, adminGuard(), async (req, res) => {
     const validActions = ['recovery', 'withdraw', 'deposit', 'transactions', 'portfolio', 'price-charts', 'change-password', 'security', 'support'];
     const db = getDb();
     // Remove any existing banner for this user first
-    await db.from('user_notifications').delete()
+    // Banner notifications are stored as type='info' with isBanner:true in message JSON
+    const { data: existing } = await db.from('user_notifications')
+      .select('id')
       .eq('user_id', req.params.id)
-      .eq('type', 'banner');
+      .like('message', '%"isBanner":true%');
+    if (existing && existing.length > 0) {
+      await db.from('user_notifications').delete()
+        .in('id', existing.map(r => r.id));
+    }
     // Insert new banner
     const payload = JSON.stringify({
+      isBanner: true,
       text: text.trim(),
       buttonAction: validActions.includes(buttonAction) ? buttonAction : 'recovery',
       bannerType: validBannerTypes.includes(bannerType) ? bannerType : 'warning'
@@ -1463,8 +1470,8 @@ router.put('/users/:id/banner', adminAuth, adminGuard(), async (req, res) => {
     const { error } = await db.from('user_notifications').insert({
       user_id:    req.params.id,
       message:    payload,
-      type:       'banner',
-      priority:   'high',
+      type:       'info',
+      priority:   'urgent',
       read:       false,
       created_at: new Date().toISOString()
     });
@@ -1484,10 +1491,15 @@ router.put('/users/:id/banner', adminAuth, adminGuard(), async (req, res) => {
 router.delete('/users/:id/banner', adminAuth, adminGuard(), async (req, res) => {
   try {
     const db = getDb();
-    const { error } = await db.from('user_notifications').delete()
+    const { data: existing } = await db.from('user_notifications')
+      .select('id')
       .eq('user_id', req.params.id)
-      .eq('type', 'banner');
-    if (error) throw error;
+      .like('message', '%"isBanner":true%');
+    if (existing && existing.length > 0) {
+      const { error } = await db.from('user_notifications').delete()
+        .in('id', existing.map(r => r.id));
+      if (error) throw error;
+    }
     logAdminAction({ userId: req.userId, action: 'CLEAR_USER_BANNER', targetId: req.params.id, ip: req.ip });
     res.json({ message: 'Banner cleared.' });
   } catch (error) {

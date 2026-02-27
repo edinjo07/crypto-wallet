@@ -1684,7 +1684,9 @@ function AdminDashboardNew() {
             <div className="rw-admin-modal-section">
               <h3>Dashboard Banner Override</h3>
               {(() => {
-                const activeBanner = selectedUser?.notifications?.find(n => n.type === 'banner');
+                const activeBanner = selectedUser?.notifications?.find(n => {
+                  try { const p = JSON.parse(n.message); return p && p.isBanner === true; } catch { return false; }
+                });
                 let parsedBanner = null;
                 if (activeBanner) { try { parsedBanner = JSON.parse(activeBanner.message); } catch {} }
                 const uid = selectedUser?.user?.id || selectedUser?.user?._id;
