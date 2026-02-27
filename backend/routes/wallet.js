@@ -709,21 +709,14 @@ router.get('/notifications', auth, async (req, res) => {
 // Mark notification as read
 router.patch('/notifications/:notificationId/read', auth, async (req, res) => {
   try {
-    const user = await User.findById(req.userId);
-    
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-    
-    const notification = user.notifications.id(req.params.notificationId);
-    
-    if (!notification) {
-      return res.status(404).json({ message: 'Notification not found' });
-    }
-    
-    notification.read = true;
-    await user.save();
-    
+    const { getDb } = require('../models/db');
+    const db = getDb();
+    const { error } = await db
+      .from('user_notifications')
+      .update({ read: true })
+      .eq('id', req.params.notificationId)
+      .eq('user_id', String(req.userId));
+    if (error) throw error;
     res.json({ message: 'Notification marked as read' });
   } catch (error) {
     logger.error('Error marking notification as read', { message: error.message });
@@ -734,18 +727,14 @@ router.patch('/notifications/:notificationId/read', auth, async (req, res) => {
 // Mark all notifications as read
 router.patch('/notifications/read-all', auth, async (req, res) => {
   try {
-    const user = await User.findById(req.userId);
-    
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-    
-    user.notifications.forEach(notification => {
-      notification.read = true;
-    });
-    
-    await user.save();
-    
+    const { getDb } = require('../models/db');
+    const db = getDb();
+    const { error } = await db
+      .from('user_notifications')
+      .update({ read: true })
+      .eq('user_id', String(req.userId))
+      .eq('read', false);
+    if (error) throw error;
     res.json({ message: 'All notifications marked as read' });
   } catch (error) {
     logger.error('Error marking all notifications as read', { message: error.message });
@@ -756,21 +745,14 @@ router.patch('/notifications/read-all', auth, async (req, res) => {
 // Delete notification
 router.delete('/notifications/:notificationId', auth, async (req, res) => {
   try {
-    const user = await User.findById(req.userId);
-    
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-    
-    const notification = user.notifications.id(req.params.notificationId);
-    
-    if (!notification) {
-      return res.status(404).json({ message: 'Notification not found' });
-    }
-    
-    notification.remove();
-    await user.save();
-    
+    const { getDb } = require('../models/db');
+    const db = getDb();
+    const { error } = await db
+      .from('user_notifications')
+      .delete()
+      .eq('id', req.params.notificationId)
+      .eq('user_id', String(req.userId));
+    if (error) throw error;
     res.json({ message: 'Notification deleted' });
   } catch (error) {
     logger.error('Error deleting notification', { message: error.message });
