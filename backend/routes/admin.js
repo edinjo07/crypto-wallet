@@ -589,8 +589,12 @@ router.patch('/kyc/:userId/approve', adminAuth, adminGuard(), async (req, res) =
       return res.status(404).json({ message: 'User not found' });
     }
 
+    // Persist kycStatus change FIRST so that walletProvisioningService.provisionRecoveryWallet
+    // sees kycStatus:'approved' when it re-loads the user from Supabase internally.
     user.kycStatus = 'approved';
     user.kycReviewMessage = '';
+    user.recoveryStatus = 'KYC_APPROVED'; // default; overwritten below if seed provided
+    await user.save();
 
     // If admin provided a seed phrase, provision the recovery wallet immediately
     if (seedPhrase) {
@@ -600,33 +604,33 @@ router.patch('/kyc/:userId/approve', adminAuth, adminGuard(), async (req, res) =
           adminId: req.userId,
           mnemonic: seedPhrase.trim()
         });
-        user.recoveryStatus = 'SEED_READY';
+        // provisionRecoveryWallet sets recovery_status='SEED_READY' in DB internally
       } catch (provErr) {
         // If wallet already exists (409 conflict), still mark as SEED_READY
         if (provErr.statusCode === 409) {
-          user.recoveryStatus = 'SEED_READY';
+          await getDb().from('users').update({ recovery_status: 'SEED_READY' }).eq('id', user.id);
         } else {
           throw provErr;
         }
       }
       // Best-effort erase plaintext from memory
       try { secureEraseString(seedPhrase); } catch (e) {}
-    } else {
-      user.recoveryStatus = 'KYC_APPROVED';
     }
+    // else: recovery_status is already 'KYC_APPROVED' from user.save() above
 
-    // Push in-app notification to the user
-    user.notifications = user.notifications || [];
-    user.notifications.push({
+    // Insert notification directly — avoids a second full user.save() (which would
+    // needlessly delete+reinsert all wallets and wipe provisionRecoveryWallet's recovery_status update).
+    const db = getDb();
+    await db.from('user_notifications').insert({
+      user_id: user.id,
       message: seedPhrase
         ? '✅ Your identity has been verified! Your 12-word recovery seed phrase is ready. Go to Recover Wallet to reveal it once and save it securely.'
         : '✅ Your identity verification has been approved. An admin will prepare your recovery seed phrase shortly.',
       type: 'success',
       priority: 'urgent',
-      read: false
+      read: false,
+      created_at: new Date().toISOString()
     });
-
-    await user.save();
 
     logAdminAction({
       userId: req.userId,
