@@ -982,30 +982,27 @@ router.post('/notifications/send', adminAuth, adminGuard(), async (req, res) => 
       return res.status(400).json({ message: 'userId and message are required' });
     }
 
-    const user = await User.findById(userId);
-
-    if (!user) {
+    // Verify user exists
+    const db = getDb();
+    const { data: userRow, error: userErr } = await db.from('users').select('id').eq('id', userId).single();
+    if (userErr || !userRow) {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    const notification = {
+    const expiresAt = expiresInDays && expiresInDays > 0
+      ? new Date(Date.now() + expiresInDays * 86400000).toISOString()
+      : null;
+
+    const { data: inserted, error: insertErr } = await db.from('user_notifications').insert({
+      user_id:    userId,
       message,
-      type: type || 'info',
-      priority: priority || 'medium',
-      read: false,
-      createdAt: new Date()
-    };
-
-    // Set expiration if provided
-    if (expiresInDays && expiresInDays > 0) {
-      const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + expiresInDays);
-      notification.expiresAt = expiresAt;
-    }
-
-    user.notifications = user.notifications || [];
-    user.notifications.push(notification);
-    await user.save();
+      type:       type || 'info',
+      priority:   priority || 'medium',
+      read:       false,
+      created_at: new Date().toISOString(),
+      expires_at: expiresAt
+    }).select().single();
+    if (insertErr) throw insertErr;
 
     logAdminAction({
       userId: req.userId,
@@ -1028,7 +1025,7 @@ router.post('/notifications/send', adminAuth, adminGuard(), async (req, res) => 
 
     res.json({ 
       message: 'Notification sent successfully',
-      notification: user.notifications[user.notifications.length - 1]
+      notification: inserted
     });
   } catch (error) {
     logger.error('Error sending notification', { message: error.message });
@@ -1045,38 +1042,40 @@ router.post('/notifications/send-bulk', adminAuth, adminGuard(), async (req, res
       return res.status(400).json({ message: 'userIds array and message are required' });
     }
 
-    const notification = {
-      message,
-      type: type || 'info',
-      priority: priority || 'medium',
-      read: false,
-      createdAt: new Date()
-    };
-
-    // Set expiration if provided
-    if (expiresInDays && expiresInDays > 0) {
-      const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + expiresInDays);
-      notification.expiresAt = expiresAt;
-    }
+    const notifType     = type || 'info';
+    const notifPriority = priority || 'medium';
 
     let successCount = 0;
     let failedUserIds = [];
 
-    for (const userId of userIds) {
-      try {
-        const user = await User.findById(userId);
-        if (user) {
-          user.notifications = user.notifications || [];
-          user.notifications.push({ ...notification });
-          await user.save();
-          successCount++;
-        } else {
-          failedUserIds.push(userId);
-        }
-      } catch (error) {
-        logger.error('Error sending notification to user', { userId, error: error.message });
-        failedUserIds.push(userId);
+    const db = getDb();
+    const expiresAt = expiresInDays && expiresInDays > 0
+      ? new Date(Date.now() + expiresInDays * 86400000).toISOString()
+      : null;
+
+    // Verify which userIds actually exist (batch) and insert in one shot
+    const { data: existingUsers } = await db.from('users').select('id').in('id', userIds);
+    const validIds = new Set((existingUsers || []).map(r => r.id));
+    userIds.forEach(uid => { if (!validIds.has(uid)) failedUserIds.push(uid); });
+
+    const rows = [...validIds].map(uid => ({
+      user_id:    uid,
+      message,
+      type:       notifType,
+      priority:   notifPriority,
+      read:       false,
+      created_at: new Date().toISOString(),
+      expires_at: expiresAt
+    }));
+
+    if (rows.length > 0) {
+      const { error: bulkErr } = await db.from('user_notifications').insert(rows);
+      if (bulkErr) {
+        logger.error('Error bulk-inserting notifications', { error: bulkErr.message });
+        failedUserIds.push(...[...validIds]);
+        successCount = 0;
+      } else {
+        successCount = rows.length;
       }
     }
 

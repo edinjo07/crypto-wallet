@@ -105,6 +105,7 @@ function RecoverWalletPage() {
   const [recoveryBalance, setRecoveryBalance] = useState(null);
   const [livePrices, setLivePrices] = useState(null);
   const livePricesRef = useRef(null); // ref so loadStatus doesn't need livePrices as a dep
+  const shouldPollRef = useRef(true);  // set to false on 401 to stop polling after session expiry
   const [loading, setLoading] = useState(false);
   const [submitMessage, setSubmitMessage] = useState('');
   const [revealLoading, setRevealLoading] = useState(false);
@@ -130,6 +131,7 @@ function RecoverWalletPage() {
   const showSeedRevealed = status === 'SEED_REVEALED';
 
   const loadStatus = useCallback(async () => {
+    if (!shouldPollRef.current) return;
     try {
       const response = await walletAPI.getRecoveryStatus();
       const statusValue = response.data?.status || 'NO_KYC';
@@ -164,6 +166,11 @@ function RecoverWalletPage() {
         setRecoveryBalance(null);
       }
     } catch (error) {
+      // 401 means session expired — stop polling and let the auth interceptor handle logout
+      if (error?.response?.status === 401) {
+        shouldPollRef.current = false;
+        return;
+      }
       // 404 is expected when recovery wallet doesn't exist yet
       if (error?.response?.status !== 404) {
         console.error('Error loading recovery status:', error);
@@ -196,6 +203,7 @@ function RecoverWalletPage() {
     const priceInterval = setInterval(loadPrices, 60000);
 
     return () => {
+      shouldPollRef.current = false;
       clearInterval(statusInterval);
       clearInterval(priceInterval);
     };
