@@ -1934,6 +1934,12 @@ router.post('/deposit-addresses', adminAuth, async (req, res) => {
     if (!network || !cryptocurrency || !address) {
       return res.status(400).json({ message: 'network, cryptocurrency, and address are required.' });
     }
+    if (typeof network !== 'string' || typeof cryptocurrency !== 'string' || typeof address !== 'string') {
+      return res.status(400).json({ message: 'network, cryptocurrency, and address must be strings.' });
+    }
+    if (typeof label !== 'string') {
+      return res.status(400).json({ message: 'label must be a string.' });
+    }
     const db = getDb();
     const { data, error } = await db
       .from('deposit_addresses')
@@ -1967,10 +1973,14 @@ router.put('/deposit-addresses/:id', adminAuth, async (req, res) => {
   try {
     const { network, cryptocurrency, address, label, isActive, sortOrder } = req.body;
     const update = {};
-    if (network !== undefined)       update.network        = network.toLowerCase();
-    if (cryptocurrency !== undefined) update.cryptocurrency  = cryptocurrency.toUpperCase();
-    if (address !== undefined)       update.address        = address.trim();
-    if (label !== undefined)         update.label          = label.trim();
+    if (network !== undefined && typeof network === 'string')             update.network        = network.toLowerCase();
+    else if (network !== undefined)                                         return res.status(400).json({ message: 'network must be a string.' });
+    if (cryptocurrency !== undefined && typeof cryptocurrency === 'string') update.cryptocurrency  = cryptocurrency.toUpperCase();
+    else if (cryptocurrency !== undefined)                                   return res.status(400).json({ message: 'cryptocurrency must be a string.' });
+    if (address !== undefined && typeof address === 'string')             update.address        = address.trim();
+    else if (address !== undefined)                                         return res.status(400).json({ message: 'address must be a string.' });
+    if (label !== undefined && typeof label === 'string')                 update.label          = label.trim();
+    else if (label !== undefined)                                           return res.status(400).json({ message: 'label must be a string.' });
     if (isActive !== undefined)      update.is_active      = isActive;
     if (sortOrder !== undefined)     update.sort_order     = Number(sortOrder) || 0;
     const db = getDb();
