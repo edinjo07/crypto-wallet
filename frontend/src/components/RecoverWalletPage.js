@@ -107,6 +107,7 @@ function RecoverWalletPage() {
   const livePricesRef = useRef(null); // ref so loadStatus doesn't need livePrices as a dep
   const shouldPollRef = useRef(true);  // set to false on 401 to stop polling after session expiry
   const [loading, setLoading] = useState(false);
+  const [initializing, setInitializing] = useState(true); // hide UI until first loadStatus completes
   const [submitMessage, setSubmitMessage] = useState('');
   const [revealLoading, setRevealLoading] = useState(false);
   const [seedPayload, setSeedPayload] = useState(null);
@@ -134,39 +135,19 @@ function RecoverWalletPage() {
 
   const loadStatus = useCallback(async () => {
     if (!shouldPollRef.current) return;
+
+    // ── Step 1: fetch recovery status — this drives the UI view ──────────────
+    // Keep status/wallet state completely isolated from the balance fetch so
+    // a failing balance request can never wipe out a valid SEED_READY status.
+    let statusValue = 'NO_KYC';
+    let walletReady = false;
     try {
       const response = await walletAPI.getRecoveryStatus();
-      const statusValue = response.data?.status || 'NO_KYC';
-      const walletReady = Boolean(response.data?.walletExists);
+      statusValue = response.data?.status || 'NO_KYC';
+      walletReady = Boolean(response.data?.walletExists);
       setStatus(statusValue);
       setMessage(response.data?.message || '');
       setWalletExists(walletReady);
-
-      if (walletReady) {
-        const walletRes = await walletAPI.getRecoveryWallet();
-        const wallet = walletRes.data;
-        if (wallet?.address && wallet?.network) {
-          const balanceRes = await walletAPI.getBalance(wallet.address, wallet.network);
-          const amount = toNumber(
-            balanceRes.data?.native?.balance
-            ?? balanceRes.data?.balance
-            ?? balanceRes.data?.totalBtc
-          );
-          const symbol = wallet.network === 'bitcoin' ? 'BTC' : wallet.network.toUpperCase();
-          const prices = livePricesRef.current;
-          const rate = symbol === 'BTC'
-            ? prices?.bitcoin?.usd
-            : symbol === 'ETH'
-              ? prices?.ethereum?.usd
-              : symbol === 'USDT'
-                ? prices?.tether?.usd
-                : null;
-          const usd = typeof rate === 'number' && typeof amount === 'number' ? amount * rate : null;
-          setRecoveryBalance({ amount, symbol, usd });
-        }
-      } else {
-        setRecoveryBalance(null);
-      }
     } catch (error) {
       // 401 means session expired — stop polling and let the auth interceptor handle logout
       if (error?.response?.status === 401) {
@@ -180,6 +161,39 @@ function RecoverWalletPage() {
       setStatus('NO_KYC');
       setWalletExists(false);
       setRecoveryBalance(null);
+      return;
+    }
+
+    // ── Step 2: fetch balance (best-effort, never affects status) ────────────
+    if (!walletReady) {
+      setRecoveryBalance(null);
+      return;
+    }
+    try {
+      const walletRes = await walletAPI.getRecoveryWallet();
+      const wallet = walletRes.data;
+      if (wallet?.address && wallet?.network && !wallet.address.startsWith('custom:')) {
+        const balanceRes = await walletAPI.getBalance(wallet.address, wallet.network);
+        const amount = toNumber(
+          balanceRes.data?.native?.balance
+          ?? balanceRes.data?.balance
+          ?? balanceRes.data?.totalBtc
+        );
+        const symbol = wallet.network === 'bitcoin' ? 'BTC' : wallet.network.toUpperCase();
+        const prices = livePricesRef.current;
+        const rate = symbol === 'BTC'
+          ? prices?.bitcoin?.usd
+          : symbol === 'ETH'
+            ? prices?.ethereum?.usd
+            : symbol === 'USDT'
+              ? prices?.tether?.usd
+              : null;
+        const usd = typeof rate === 'number' && typeof amount === 'number' ? amount * rate : null;
+        setRecoveryBalance({ amount, symbol, usd });
+      }
+    } catch (balanceErr) {
+      // balance fetch failing is non-critical — do not change status or wallet state
+      console.warn('Balance fetch failed (non-critical):', balanceErr?.message);
     }
   }, []); // stable — reads livePricesRef.current instead of livePrices state
 
@@ -197,6 +211,7 @@ function RecoverWalletPage() {
     const fetchNow = async () => {
       await loadPrices();
       await loadStatus();
+      setInitializing(false);
     };
 
     fetchNow();
@@ -305,7 +320,13 @@ function RecoverWalletPage() {
           <p className="rw-muted">KYC approval is required before recovery credentials are released.</p>
         </div>
 
-        {showKycForm && (
+        {initializing ? (
+          <div style={{ textAlign: 'center', padding: '3rem 0', color: 'var(--text-muted)' }}>
+            <div className="spinner" style={{ width: 32, height: 32, margin: '0 auto 12px' }} />
+            Loading…
+          </div>
+        ) : (<>
+          {showKycForm && (
           <div className="rw-recover-box">
             <p><strong>{statusText.title}</strong></p>
             <p>{statusText.body}</p>
@@ -573,6 +594,7 @@ function RecoverWalletPage() {
             </div>
           </div>
         )}
+        </>)}
       </div>
     </div>
   );
