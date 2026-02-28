@@ -81,6 +81,7 @@ export const tokenAPI = {
 
 export const supportAPI = {
   submit: (data) => client.post('/support', data),
+  getMyTickets: () => client.get('/support/my-tickets'),
 };
 
 // Admin API

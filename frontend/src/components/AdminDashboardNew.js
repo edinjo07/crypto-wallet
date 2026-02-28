@@ -1892,31 +1892,41 @@ alter table deposit_addresses disable row level security;`;
                           {new Date(ticket.createdAt).toLocaleString()}
                         </div>
                         <div style={{ margin: '8px 0', fontSize: '0.9rem', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{ticket.message}</div>
-                        {/* Admin note */}
+                        {/* Admin reply */}
                         {noteState.editing ? (
-                          <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-                            <input className="rw-admin-input" style={{ flex: 1, fontSize: '0.82rem' }}
-                              placeholder="Admin reply / note"
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10 }}>
+                            <textarea
+                              className="rw-admin-input"
+                              rows={4}
+                              style={{ fontSize: '0.85rem', resize: 'vertical', fontFamily: 'inherit', width: '100%' }}
+                              placeholder="Type your reply to the user…"
                               value={noteState.value ?? ticket.adminNote ?? ''}
                               onChange={e => setSupportNoteEdit(n => ({ ...n, [tid]: { ...n[tid], value: e.target.value } }))}
                             />
-                            <button className="rw-btn rw-btn-primary" style={{ padding: '4px 12px', fontSize: '0.8rem' }}
-                              onClick={async () => {
-                                try {
-                                  await adminAPI.updateSupportTicket(tid, { adminNote: noteState.value ?? '' });
-                                  setSupportTickets(prev => prev.map(t => (t._id || t.id) === tid ? { ...t, adminNote: noteState.value ?? '' } : t));
-                                  setSupportNoteEdit(n => ({ ...n, [tid]: { editing: false } }));
-                                } catch { /* ignore */ }
-                              }}>Save</button>
-                            <button className="rw-btn rw-btn-secondary" style={{ padding: '4px 10px', fontSize: '0.8rem' }}
-                              onClick={() => setSupportNoteEdit(n => ({ ...n, [tid]: { editing: false } }))}>Cancel</button>
+                            <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                              <button className="rw-btn rw-btn-secondary" style={{ padding: '4px 12px', fontSize: '0.8rem' }}
+                                onClick={() => setSupportNoteEdit(n => ({ ...n, [tid]: { editing: false } }))}>Cancel</button>
+                              <button className="rw-btn rw-btn-primary" style={{ padding: '4px 14px', fontSize: '0.8rem' }}
+                                onClick={async () => {
+                                  try {
+                                    await adminAPI.updateSupportTicket(tid, { adminNote: noteState.value ?? '' });
+                                    setSupportTickets(prev => prev.map(t => (t._id || t.id) === tid ? { ...t, adminNote: noteState.value ?? '' } : t));
+                                    setSupportNoteEdit(n => ({ ...n, [tid]: { editing: false } }));
+                                  } catch { /* ignore */ }
+                                }}>Send Reply</button>
+                            </div>
                           </div>
                         ) : (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
-                            {ticket.adminNote && <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>📝 {ticket.adminNote}</span>}
+                          <div style={{ marginTop: 8 }}>
+                            {ticket.adminNote && (
+                              <div style={{ padding: '8px 12px', borderRadius: 8, background: 'rgba(74,158,255,0.07)', border: '1px solid rgba(74,158,255,0.2)', fontSize: '0.84rem', whiteSpace: 'pre-wrap', wordBreak: 'break-word', marginBottom: 6 }}>
+                                <span style={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--primary-blue)', display: 'block', marginBottom: 4 }}>💬 Your reply</span>
+                                {ticket.adminNote}
+                              </div>
+                            )}
                             <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--primary-blue)', fontSize: '0.8rem', padding: 0 }}
                               onClick={() => setSupportNoteEdit(n => ({ ...n, [tid]: { editing: true, value: ticket.adminNote || '' } }))}>
-                              {ticket.adminNote ? '✏ Edit note' : '+ Add note'}
+                              {ticket.adminNote ? '✏️ Edit reply' : '💬 Reply to user'}
                             </button>
                           </div>
                         )}

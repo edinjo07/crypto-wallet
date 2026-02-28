@@ -36,4 +36,15 @@ router.post('/', auth, async (req, res) => {
   }
 });
 
+// GET /api/support/my-tickets — list logged-in user's own tickets
+router.get('/my-tickets', auth, async (req, res) => {
+  try {
+    const tickets = await SupportTicket.find({ userId: req.userId }, { sort: { createdAt: -1 }, limit: 50 });
+    res.json({ tickets });
+  } catch (err) {
+    logger.error('Error fetching user tickets', { message: err.message });
+    res.status(500).json({ message: 'Failed to load tickets.' });
+  }
+});
+
 module.exports = router;
