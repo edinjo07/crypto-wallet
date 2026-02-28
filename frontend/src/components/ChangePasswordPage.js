@@ -4,11 +4,11 @@ import { authAPI } from '../services/api';
 import Icon from './Icon';
 
 const rules = [
-  'At least 8 characters',
-  'One uppercase letter (A-Z)',
-  'One lowercase letter (a-z)',
-  'One number (0-9)',
-  'One special character (!@#$%^&*)'
+  { label: 'At least 8 characters',          test: (p) => p.length >= 8 },
+  { label: 'One uppercase letter (A-Z)',      test: (p) => /[A-Z]/.test(p) },
+  { label: 'One lowercase letter (a-z)',      test: (p) => /[a-z]/.test(p) },
+  { label: 'One number (0-9)',                test: (p) => /\d/.test(p) },
+  { label: 'One special character (!@#$%^&*)', test: (p) => /[!@#$%^&*]/.test(p) },
 ];
 
 function ChangePasswordPage() {
@@ -23,15 +23,8 @@ function ChangePasswordPage() {
   const strongPw = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*]).{8,100}$/;
 
   const strength = (() => {
-    const p = form.newPassword;
-    if (!p) return 0;
-    let s = 0;
-    if (p.length >= 8) s++;
-    if (/[A-Z]/.test(p)) s++;
-    if (/[a-z]/.test(p)) s++;
-    if (/\d/.test(p)) s++;
-    if (/[!@#$%^&*]/.test(p)) s++;
-    return s;
+    if (!form.newPassword) return 0;
+    return rules.filter((r) => r.test(form.newPassword)).length;
   })();
 
   const strengthLabel = ['', 'Very Weak', 'Weak', 'Fair', 'Good', 'Strong'][strength];
@@ -187,9 +180,19 @@ function ChangePasswordPage() {
             {/* Password requirements */}
             <div style={{ marginBottom: '1rem', padding: '10px 14px', background: 'rgba(74,158,255,0.07)', borderRadius: 10, fontSize: '0.83rem' }}>
               <div style={{ fontWeight: 600, marginBottom: 6, color: 'var(--text-muted)' }}>Password requirements:</div>
-              {rules.map((r) => (
-                <div key={r} style={{ marginBottom: 2, color: 'var(--text-muted)' }}>• {r}</div>
-              ))}
+              {rules.map((r) => {
+                const passed = form.newPassword ? r.test(form.newPassword) : false;
+                return (
+                  <div key={r.label} style={{ marginBottom: 3, display: 'flex', alignItems: 'center', gap: 6,
+                    color: form.newPassword ? (passed ? 'var(--success, #22c55e)' : 'var(--danger, #ef4444)') : 'var(--text-muted)'
+                  }}>
+                    <span style={{ fontSize: '0.9rem', width: 16, textAlign: 'center' }}>
+                      {form.newPassword ? (passed ? '✓' : '✗') : '•'}
+                    </span>
+                    {r.label}
+                  </div>
+                );
+              })}
             </div>
 
             {message && (
