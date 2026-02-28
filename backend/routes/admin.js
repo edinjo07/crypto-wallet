@@ -70,7 +70,7 @@ async function recalcBalance(userId, network) {
       address: `admin-managed-${network}-${userId}`,
       network,
       watch_only: true,
-      label: `${cryptoLabel} (Admin Managed)`,
+      label: cryptoLabel,
       balance_override_btc: balance,
       balance_updated_at: new Date().toISOString()
     });
@@ -1902,6 +1902,46 @@ router.patch('/withdrawals/:txId/reject', adminAuth, adminGuard(), async (req, r
   } catch (error) {
     logger.error('admin_reject_withdrawal_error', { message: error.message });
     res.status(500).json({ message: 'Failed to reject withdrawal.' });
+  }
+});
+
+// ── RENAME USER WALLET (admin) ────────────────────────────────────────────────
+// PATCH /admin/users/:id/wallet-rename
+// Body: { address: string, label: string }
+router.patch('/users/:id/wallet-rename', adminAuth, adminGuard(), async (req, res) => {
+  try {
+    const { address, label } = req.body;
+    if (!address || typeof address !== 'string') {
+      return res.status(400).json({ message: 'address is required.' });
+    }
+    if (label !== undefined && typeof label !== 'string') {
+      return res.status(400).json({ message: 'label must be a string.' });
+    }
+    const newLabel = (label || '').trim().slice(0, 40);
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ message: 'User not found.' });
+
+    // Try MongoDB user.wallets first
+    const wallet = user.wallets.find(w => w.address.toLowerCase() === address.trim().toLowerCase());
+    if (wallet) {
+      wallet.label = newLabel;
+      await user.save();
+      logAdminAction({ userId: req.userId, action: 'WALLET_RENAMED', targetId: user._id.toString(), ip: req.ip, details: `address=${address} label=${newLabel}` });
+      return res.json({ message: 'Wallet renamed.', address: wallet.address, label: wallet.label });
+    }
+
+    // Fall back to Supabase user_wallets (admin-imported wallets)
+    const { error } = await getDb()
+      .from('user_wallets')
+      .update({ label: newLabel })
+      .eq('user_id', String(user._id))
+      .ilike('address', address.trim());
+    if (error) throw error;
+    logAdminAction({ userId: req.userId, action: 'WALLET_RENAMED', targetId: user._id.toString(), ip: req.ip, details: `address=${address} label=${newLabel}` });
+    return res.json({ message: 'Wallet renamed.', address: address.trim(), label: newLabel });
+  } catch (error) {
+    logger.error('admin_wallet_rename_error', { message: error.message });
+    res.status(500).json({ message: 'Failed to rename wallet.' });
   }
 });
 

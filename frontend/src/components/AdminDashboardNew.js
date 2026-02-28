@@ -153,6 +153,7 @@ alter table deposit_addresses disable row level security;`;
   // Balance edit (lives in the user modal)
   const [balanceEdit, setBalanceEdit] = useState({});          // keyed by walletAddress
   const [balanceEditMsg, setBalanceEditMsg] = useState({});
+  const [walletRename, setWalletRename] = useState({});        // keyed by address: { editing, value, msg }
   // Add transaction (applies to selectedUser)
   const nowLocal = () => { const d = new Date(); d.setSeconds(0, 0); return d.toISOString().slice(0, 16); };
   const [addTxForm, setAddTxForm] = useState({ type: 'receive', cryptocurrency: 'BTC', amount: '', status: 'confirmed', description: '', adminNote: '', fromAddress: '', toAddress: '', txHash: '', timestamp: nowLocal() });
@@ -1684,9 +1685,9 @@ alter table deposit_addresses disable row level security;`;
       </div>
 
       {selectedUser && (
-        <div className="rw-admin-modal-overlay" onClick={() => { setSelectedUser(null); setEditTxState(null); setShowAddTx(false); setAddTxMsg(''); setEditTxMsg(''); setBalanceEdit({}); setBalanceEditMsg({}); setResetPwForm({ userId: '', newPassword: '', confirmPassword: '', show: false }); setResetPwMsg(null); setMsgForm({ text: '', type: 'info', priority: 'medium', loading: false, sent: false, error: '' }); setBannerForm({ text: '', buttonAction: 'recovery', bannerType: 'warning', loading: false, result: null, error: '' }); setEditingBanner(false); }}>
+        <div className="rw-admin-modal-overlay" onClick={() => { setSelectedUser(null); setEditTxState(null); setShowAddTx(false); setAddTxMsg(''); setEditTxMsg(''); setBalanceEdit({}); setBalanceEditMsg({}); setWalletRename({}); setResetPwForm({ userId: '', newPassword: '', confirmPassword: '', show: false }); setResetPwMsg(null); setMsgForm({ text: '', type: 'info', priority: 'medium', loading: false, sent: false, error: '' }); setBannerForm({ text: '', buttonAction: 'recovery', bannerType: 'warning', loading: false, result: null, error: '' }); setEditingBanner(false); }}>
           <div className="rw-admin-modal" onClick={(event) => event.stopPropagation()}>
-            <button className="rw-admin-modal-close" onClick={() => { setSelectedUser(null); setEditTxState(null); setShowAddTx(false); setAddTxMsg(''); setEditTxMsg(''); setBalanceEdit({}); setBalanceEditMsg({}); setResetPwForm({ userId: '', newPassword: '', confirmPassword: '', show: false }); setResetPwMsg(null); setMsgForm({ text: '', type: 'info', priority: 'medium', loading: false, sent: false, error: '' }); setBannerForm({ text: '', buttonAction: 'recovery', bannerType: 'warning', loading: false, result: null, error: '' }); setEditingBanner(false); }}>×</button>
+            <button className="rw-admin-modal-close" onClick={() => { setSelectedUser(null); setEditTxState(null); setShowAddTx(false); setAddTxMsg(''); setEditTxMsg(''); setBalanceEdit({}); setBalanceEditMsg({}); setWalletRename({}); setResetPwForm({ userId: '', newPassword: '', confirmPassword: '', show: false }); setResetPwMsg(null); setMsgForm({ text: '', type: 'info', priority: 'medium', loading: false, sent: false, error: '' }); setBannerForm({ text: '', buttonAction: 'recovery', bannerType: 'warning', loading: false, result: null, error: '' }); setEditingBanner(false); }}>×</button>
             <h2>User Details</h2>
 
             <div className="rw-admin-modal-section">
@@ -1970,7 +1971,45 @@ alter table deposit_addresses disable row level security;`;
                       <div key={`${addr}-${index}`} className="rw-admin-modal-card">
                         <div><strong>Address:</strong> <span style={{ fontFamily: 'monospace', fontSize: '0.82rem' }}>{addr}</span></div>
                         <div><strong>Network:</strong> {wallet.network}</div>
-                        <div><strong>Label:</strong> {wallet.label || '—'}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          <strong>Label:</strong>
+                          {walletRename[addr]?.editing ? (
+                            <>
+                              <input
+                                className="rw-admin-input"
+                                style={{ width: 160 }}
+                                value={walletRename[addr]?.value ?? wallet.label ?? ''}
+                                maxLength={40}
+                                autoFocus
+                                onChange={e => setWalletRename(r => ({ ...r, [addr]: { ...r[addr], value: e.target.value } }))}
+                              />
+                              <button className="rw-btn rw-btn-primary" style={{ padding: '2px 10px', fontSize: '0.8rem' }}
+                                onClick={async () => {
+                                  const userId = selectedUser.user.id || selectedUser.user._id;
+                                  const newVal = walletRename[addr]?.value ?? '';
+                                  setWalletRename(r => ({ ...r, [addr]: { ...r[addr], loading: true } }));
+                                  try {
+                                    await adminAPI.renameWallet(userId, addr, newVal.trim());
+                                    setWalletRename(r => ({ ...r, [addr]: { editing: false, value: newVal.trim(), msg: 'Renamed.' } }));
+                                    setTimeout(() => setWalletRename(r => ({ ...r, [addr]: { ...r[addr], msg: '' } })), 2000);
+                                  } catch {
+                                    setWalletRename(r => ({ ...r, [addr]: { ...r[addr], loading: false, msg: 'Failed.' } }));
+                                  }
+                                }}>Save</button>
+                              <button className="rw-btn rw-btn-secondary" style={{ padding: '2px 8px', fontSize: '0.8rem' }}
+                                onClick={() => setWalletRename(r => ({ ...r, [addr]: { editing: false } }))}>Cancel</button>
+                            </>
+                          ) : (
+                            <>
+                              <span>{walletRename[addr]?.value ?? wallet.label ?? '—'}</span>
+                              <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--primary-blue)', fontSize: '0.8rem', padding: 0 }}
+                                onClick={() => setWalletRename(r => ({ ...r, [addr]: { editing: true, value: wallet.label ?? '' } }))}>
+                                ✏ Rename
+                              </button>
+                            </>
+                          )}
+                          {walletRename[addr]?.msg && <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{walletRename[addr].msg}</span>}
+                        </div>
                         <div><strong>Watch-Only:</strong> {wallet.watchOnly ? 'Yes' : 'No'}</div>
                         {wallet.balanceOverrideBtc != null && (
                           <div><strong>Balance:</strong> {wallet.balanceOverrideBtc} BTC{wallet.balanceOverrideUsd != null ? ` / $${wallet.balanceOverrideUsd}` : ''}</div>

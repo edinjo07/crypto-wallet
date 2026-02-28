@@ -6,8 +6,11 @@ import Icon from './Icon';
 // Strip internal/admin-set labels that should never be user-visible
 function cleanLabel(label) {
   if (!label) return '';
-  if (/^(Admin Managed|Imported \([^)]+\)|Watch-Only Wallet)$/i.test(label.trim())) return '';
-  return label.trim();
+  const s = label.trim();
+  // Strip any label that contains admin markers
+  if (/admin.?managed|admin-managed|imported\s*\(/i.test(s)) return '';
+  if (/^Watch-Only Wallet$/i.test(s)) return '';
+  return s;
 }
 
 function WithdrawPage() {

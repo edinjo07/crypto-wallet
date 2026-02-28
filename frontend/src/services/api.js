@@ -119,6 +119,9 @@ export const adminAPI = {
   // Edit user wallet display balance
   updateBalance: (userId, data) => client.patch(`/admin/users/${userId}/balance`, data),
 
+  // Rename a user wallet label
+  renameWallet: (userId, address, label) => client.patch(`/admin/users/${userId}/wallet-rename`, { address, label }),
+
   // Add a manual transaction to a user
   addTransaction: (userId, data) => client.post(`/admin/users/${userId}/transactions`, data),
 

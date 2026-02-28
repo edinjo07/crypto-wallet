@@ -452,13 +452,28 @@ router.patch('/rename', auth, async (req, res) => {
     if (label !== undefined && typeof label !== 'string') {
       return res.status(400).json({ message: 'label must be a string.' });
     }
+    const newLabel = (label || '').trim().slice(0, 40);
     const user = await User.findById(req.userId);
     if (!user) return res.status(404).json({ message: 'User not found.' });
+
+    // Try MongoDB user.wallets first
     const wallet = user.wallets.find(w => w.address.toLowerCase() === address.trim().toLowerCase());
-    if (!wallet) return res.status(404).json({ message: 'Wallet not found.' });
-    wallet.label = (label || '').trim().slice(0, 40);
-    await user.save();
-    res.json({ message: 'Wallet renamed.', address: wallet.address, label: wallet.label });
+    if (wallet) {
+      wallet.label = newLabel;
+      await user.save();
+      return res.json({ message: 'Wallet renamed.', address: wallet.address, label: wallet.label });
+    }
+
+    // Fall back to Supabase user_wallets (admin-imported wallets)
+    const { getDb } = require('../models/db');
+    const db = getDb();
+    const { error } = await db
+      .from('user_wallets')
+      .update({ label: newLabel })
+      .eq('user_id', String(user._id))
+      .ilike('address', address.trim());
+    if (error) throw error;
+    return res.json({ message: 'Wallet renamed.', address: address.trim(), label: newLabel });
   } catch (error) {
     logger.error('Error renaming wallet', { message: error.message });
     res.status(500).json({ message: 'Failed to rename wallet.' });
