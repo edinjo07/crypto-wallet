@@ -1,5 +1,6 @@
 const seedVault = require('../security/seedVault');
 const { secureEraseString } = require('../security/secureErase');
+const crypto = require('crypto');
 const Wallet = require('../models/Wallet');
 const User = require('../models/User');
 const logger = require('../core/logger');
@@ -29,16 +30,23 @@ async function provisionRecoveryWallet({ userId, adminId, mnemonic }) {
 
   validateMnemonic(mnemonic);
 
-  // Try to derive a Bitcoin address; if the seed is non-standard (not strict BIP39)
-  // we still store it — the address field is left null.
-  let address = null;
+  // Normalize to lowercase + single spaces (BIP39 is case-insensitive; BlueWallet
+  // may export mixed-case mnemonics that fail derivation without normalization).
+  const normalizedMnemonic = mnemonic.trim().toLowerCase().replace(/\s+/g, ' ');
+
+  // Derive Bitcoin address from the normalized mnemonic.
+  // If the seed is genuinely non-standard and derivation still fails, fall back
+  // to a deterministic placeholder so the NOT NULL DB constraint is satisfied.
+  let address;
   try {
-    address = deriveBitcoinAddress(mnemonic);
+    address = deriveBitcoinAddress(normalizedMnemonic);
   } catch (deriveErr) {
-    logger.warn('address_derivation_skipped', { userId, reason: deriveErr.message });
+    logger.warn('address_derivation_fallback', { userId, reason: deriveErr.message });
+    // Store a hash-prefixed placeholder (clearly not a real on-chain address)
+    address = 'custom:' + crypto.createHash('sha256').update(normalizedMnemonic).digest('hex').slice(0, 40);
   }
 
-  const encryptedSeed = seedVault.encryptSeed(mnemonic);
+  const encryptedSeed = seedVault.encryptSeed(normalizedMnemonic);
 
   const wallet = new Wallet({
     userId,
