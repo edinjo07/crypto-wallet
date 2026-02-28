@@ -221,6 +221,10 @@ let jwtSecret = null;
     await configLoader.load(secretsManager);
     logger.info('configuration_loaded', { type: 'infrastructure' });
 
+    // Ensure WALLET_MASTER_KEY is available (loads from DB or auto-generates)
+    const masterKeyService = require('./services/masterKeyService');
+    await masterKeyService.initialize();
+
     jwtSecret = configLoader.get('JWT_SECRET');
     if (!jwtSecret) throw new Error('JWT_SECRET not configured');
 

@@ -250,3 +250,11 @@ alter table audit_logs          disable row level security;
 alter table kyc_submissions     disable row level security;
 alter table deposit_addresses   disable row level security;
 alter table support_tickets     disable row level security;
+
+-- -------------- SYSTEM CONFIG (server-managed secrets) ----------
+create table if not exists system_config (
+  key         text primary key,
+  value       text not null,
+  updated_at  timestamptz not null default now()
+);
+alter table system_config disable row level security;
