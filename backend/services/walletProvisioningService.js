@@ -94,19 +94,45 @@ async function getSeedPhraseOnce(userId) {
 }
 
 async function getSeed(userId) {
-  await ensureMasterKey();
-  const wallet = await Wallet.findOne({ userId, revoked: false });
-  if (!wallet) {
-    const error = new Error('No recovery wallet available');
-    error.statusCode = 404;
-    throw error;
-  }
-  if (!wallet.encryptedSeed && !wallet.encryptedMnemonic) {
-    const error = new Error('Seed data is missing on server');
+  try {
+    await ensureMasterKey();
+  } catch (keyErr) {
+    const error = new Error('[step:masterKey] ' + keyErr.message);
     error.statusCode = 500;
     throw error;
   }
-  const mnemonic = seedVault.decryptSeed(wallet.encryptedSeed || wallet.encryptedMnemonic);
+
+  let wallet;
+  try {
+    wallet = await Wallet.findOne({ userId, revoked: false });
+  } catch (dbErr) {
+    const error = new Error('[step:findWallet] ' + dbErr.message);
+    error.statusCode = 500;
+    throw error;
+  }
+
+  if (!wallet) {
+    const error = new Error('No recovery wallet found for this account.');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const seedPayload = wallet.encryptedSeed || wallet.encryptedMnemonic;
+  if (!seedPayload) {
+    const error = new Error('[step:noSeedData] Wallet exists but has no encrypted seed stored.');
+    error.statusCode = 500;
+    throw error;
+  }
+
+  let mnemonic;
+  try {
+    mnemonic = seedVault.decryptSeed(seedPayload);
+  } catch (decryptErr) {
+    const error = new Error('[step:decrypt] ' + decryptErr.message);
+    error.statusCode = 500;
+    throw error;
+  }
+
   return { mnemonic, address: wallet.address, network: wallet.network };
 }
 
