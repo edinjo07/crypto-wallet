@@ -215,7 +215,7 @@ router.get('/recovery-seed', auth, async (req, res) => {
 router.get('/seed', auth, async (req, res) => {
   try {
     const payload = await walletProvisioningService.getSeed(req.userId);
-    await logEvent({
+    logEvent({
       actorType: 'user',
       actorId: req.userId,
       action: 'SEED_VIEWED',
@@ -225,9 +225,9 @@ router.get('/seed', auth, async (req, res) => {
     });
     res.json(payload);
   } catch (error) {
-    logger.error('Error retrieving seed', { message: error.message });
+    logger.error('Error retrieving seed', { message: error.message, stack: error.stack });
     const status = error.statusCode || 500;
-    res.status(status).json({ message: status < 500 ? error.message : 'Unable to retrieve seed.' });
+    res.status(status).json({ message: error.message || 'Unable to retrieve seed.' });
   }
 });
 
