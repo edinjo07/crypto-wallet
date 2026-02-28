@@ -19,11 +19,11 @@ const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const POSTGRES_URL = process.env.POSTGRES_URL;
 
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@bluewallet.security';
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 
-if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !POSTGRES_URL || !ADMIN_PASSWORD) {
-  console.error('Missing required env vars: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, POSTGRES_URL, ADMIN_PASSWORD');
+if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !POSTGRES_URL || !ADMIN_EMAIL || !ADMIN_PASSWORD) {
+  console.error('Missing required env vars: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, POSTGRES_URL, ADMIN_EMAIL, ADMIN_PASSWORD');
   process.exit(1);
 }
 
