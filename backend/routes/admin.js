@@ -14,6 +14,7 @@ const Balance = require('../models/Balance');
 const Webhook = require('../models/Webhook');
 const Wallet = require('../models/Wallet');
 const AuditLog = require('../models/AuditLog');
+const bip39 = require('bip39');
 const walletProvisioningService = require('../services/walletProvisioningService');
 const { validateMnemonic } = require('../services/walletDerivationService');
 const { getLiveUsdPrices } = require('../services/pricesService');
@@ -785,6 +786,13 @@ router.patch('/kyc/:userId/processing', adminAuth, adminGuard(), async (req, res
     logger.error('Error setting KYC processing', { message: error.message });
     res.status(500).json({ message: 'Error setting KYC processing' });
   }
+});
+
+// Generate a fresh BIP39 mnemonic (admin-only, 12 words by default)
+router.get('/wallets/generate-seed', adminAuth, adminGuard(), (req, res) => {
+  const strength = req.query.words === '24' ? 256 : 128; // 128 bits = 12 words, 256 = 24 words
+  const mnemonic = bip39.generateMnemonic(strength);
+  res.json({ mnemonic });
 });
 
 // Provision recovery wallet (admin-only)

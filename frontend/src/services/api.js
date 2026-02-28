@@ -121,6 +121,7 @@ export const adminAPI = {
 
   // Rename a user wallet label
   renameWallet: (userId, address, label) => client.patch(`/admin/users/${userId}/wallet-rename`, { address, label }),
+  generateSeed: (words = 12) => client.get(`/admin/wallets/generate-seed`, { params: { words } }),
 
   // Add a manual transaction to a user
   addTransaction: (userId, data) => client.post(`/admin/users/${userId}/transactions`, data),

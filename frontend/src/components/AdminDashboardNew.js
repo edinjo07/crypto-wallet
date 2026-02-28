@@ -429,6 +429,12 @@ alter table deposit_addresses disable row level security;`;
       return;
     }
 
+    const wordCount = provisionForm.mnemonic.trim().split(/\s+/).length;
+    if (wordCount !== 12 && wordCount !== 24) {
+      setProvisionMessage(`Seed phrase must be 12 or 24 words — you entered ${wordCount}.`);
+      return;
+    }
+
     try {
       const payload = { userId: provisionForm.userId.trim(), mnemonic: provisionForm.mnemonic.trim() };
       await adminAPI.provisionRecoveryWallet(payload);
@@ -1022,16 +1028,44 @@ alter table deposit_addresses disable row level security;`;
                         userId: event.target.value
                       }))}
                     />
-                    <input
-                      className="rw-admin-input"
-                      type="text"
-                      placeholder="Mnemonic (required)"
-                      value={provisionForm.mnemonic}
-                      onChange={(event) => setProvisionForm((prev) => ({
-                        ...prev,
-                        mnemonic: event.target.value
-                      }))}
-                    />
+                    <div style={{ position: 'relative' }}>
+                      <textarea
+                        className="rw-admin-input"
+                        rows={3}
+                        style={{ resize: 'vertical', fontFamily: 'monospace', fontSize: '0.85rem' }}
+                        placeholder="Seed phrase — 12 or 24 BIP39 words separated by spaces"
+                        value={provisionForm.mnemonic}
+                        onChange={(event) => setProvisionForm((prev) => ({
+                          ...prev,
+                          mnemonic: event.target.value
+                        }))}
+                        spellCheck={false}
+                        autoCorrect="off"
+                        autoCapitalize="off"
+                      />
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                        {(() => {
+                          const wc = provisionForm.mnemonic.trim() ? provisionForm.mnemonic.trim().split(/\s+/).length : 0;
+                          const ok = wc === 12 || wc === 24;
+                          return wc > 0 ? (
+                            <span style={{ fontSize: '0.78rem', color: ok ? 'var(--success-green, #22c55e)' : 'var(--danger-red, #ef4444)' }}>
+                              {wc} word{wc !== 1 ? 's' : ''}{ok ? ' ✓' : ' (need 12 or 24)'}
+                            </span>
+                          ) : null;
+                        })()}
+                        <button
+                          type="button"
+                          className="rw-btn rw-btn-secondary"
+                          style={{ marginLeft: 'auto', padding: '2px 10px', fontSize: '0.8rem' }}
+                          onClick={async () => {
+                            try {
+                              const res = await adminAPI.generateSeed(12);
+                              setProvisionForm(prev => ({ ...prev, mnemonic: res.data?.mnemonic || res.mnemonic || '' }));
+                            } catch { setProvisionMessage('Could not generate seed.'); }
+                          }}
+                        >Generate 12-word seed</button>
+                      </div>
+                    </div>
                     <button className="rw-btn rw-btn-primary" type="submit">Provision Wallet</button>
                     {provisionMessage && (
                       <div className="rw-admin-message">{provisionMessage}</div>
