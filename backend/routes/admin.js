@@ -569,6 +569,20 @@ router.get('/kyc/pending', adminAuth, adminGuard(), async (req, res) => {
   }
 });
 
+// List KYC-approved users who are awaiting seed provisioning
+router.get('/kyc/approved', adminAuth, adminGuard(), async (req, res) => {
+  try {
+    const users = await User.find({ kycStatus: 'approved', recoveryStatus: 'KYC_APPROVED' })
+      .select('name email kycData kycStatus recoveryStatus createdAt')
+      .sort({ createdAt: -1 });
+
+    res.json({ users });
+  } catch (error) {
+    logger.error('Error fetching approved KYC users', { message: error.message });
+    res.status(500).json({ message: 'Error fetching approved KYC users' });
+  }
+});
+
 // Approve KYC
 router.patch('/kyc/:userId/approve', adminAuth, adminGuard(), async (req, res) => {
   try {

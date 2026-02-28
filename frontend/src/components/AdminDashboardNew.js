@@ -92,9 +92,15 @@ function AdminDashboardNew() {
   const [provisionMessage, setProvisionMessage] = useState('');
   const [actionMessage, setActionMessage] = useState('');
   const [kycNotes, setKycNotes] = useState({});
-  const [kycSeedPhrases, setKycSeedPhrases] = useState({});
   const [kycMessage, setKycMessage] = useState({ text: '', ok: true });
   const [kycLoadingId, setKycLoadingId] = useState(null);
+  // Seed provisioning (for KYC-approved users)
+  const [approvedUsers, setApprovedUsers] = useState([]);
+  const [showSeedProvision, setShowSeedProvision] = useState(false);
+  const [approvedSeedPhrases, setApprovedSeedPhrases] = useState({});
+  const [approvedSeedMessage, setApprovedSeedMessage] = useState({ text: '', ok: true });
+  const [approvedSeedLoadingId, setApprovedSeedLoadingId] = useState(null);
+  const [generatingSeedForId, setGeneratingSeedForId] = useState(null);
   const [revokingUserId, setRevokingUserId] = useState(null);
   // Admin password reset state (lives in user modal)
   const [resetPwForm, setResetPwForm] = useState({ userId: '', newPassword: '', confirmPassword: '', show: false });
@@ -232,6 +238,16 @@ alter table deposit_addresses disable row level security;`;
     }
   }, []);
 
+  const loadApprovedUsers = useCallback(async () => {
+    try {
+      const res = await adminAPI.getKycApproved();
+      setApprovedUsers(res.data?.users || []);
+      setShowSeedProvision(true);
+    } catch (error) {
+      setApprovedSeedMessage({ text: 'Failed to load approved users.', ok: false });
+    }
+  }, []);
+
   const loadAuditLogs = useCallback(async () => {
     try {
       const res = await adminAPI.getLogs();
@@ -357,28 +373,19 @@ alter table deposit_addresses disable row level security;`;
   }, []);
 
   const handleApproveKyc = useCallback(async (userId) => {
-    const seedPhrase = kycSeedPhrases[userId] || '';
-    if (!seedPhrase.trim()) {
-      showKycMsg('⚠ Please enter the 12-word seed phrase before approving.', false);
-      return;
-    }
-    const wordCount = seedPhrase.trim().split(/\s+/).length;
-    if (wordCount !== 12) {
-      showKycMsg(`⚠ Seed phrase must be exactly 12 words (entered ${wordCount}).`, false);
-      return;
-    }
     setKycLoadingId(userId);
     try {
-      await adminAPI.approveKyc(userId, seedPhrase.trim());
-      showKycMsg('✓ KYC approved — recovery seed provisioned. User has been notified.', true);
-      setKycSeedPhrases((prev) => { const n = { ...prev }; delete n[userId]; return n; });
+      await adminAPI.approveKyc(userId);
+      showKycMsg('✓ KYC approved. Go to Seed Provisioning to assign a recovery seed phrase.', true);
       await loadKyc();
+      // Refresh approved list if already open
+      await loadApprovedUsers();
     } catch (error) {
       showKycMsg(`✗ ${error?.response?.data?.message || 'Failed to approve KYC.'}`, false);
     } finally {
       setKycLoadingId(null);
     }
-  }, [kycSeedPhrases, loadKyc, showKycMsg]);
+  }, [loadKyc, loadApprovedUsers, showKycMsg]);
 
   const handleRejectKyc = useCallback(async (userId) => {
     setKycLoadingId(userId + '-reject');
@@ -420,6 +427,42 @@ alter table deposit_addresses disable row level security;`;
       setKycLoadingId(null);
     }
   }, [loadKyc, showKycMsg]);
+
+  const handleProvisionSeed = useCallback(async (userId) => {
+    const seed = (approvedSeedPhrases[userId] || '').trim();
+    const wc = seed.split(/\s+/).filter(Boolean).length;
+    if (wc !== 12) {
+      setApprovedSeedMessage({ text: `⚠ Seed phrase must be exactly 12 words (entered ${wc}).`, ok: false });
+      setTimeout(() => setApprovedSeedMessage({ text: '', ok: true }), 5000);
+      return;
+    }
+    setApprovedSeedLoadingId(userId);
+    try {
+      await adminAPI.provisionRecoveryWallet({ userId, mnemonic: seed });
+      setApprovedSeedMessage({ text: '✓ Seed provisioned — user can now reveal their recovery phrase.', ok: true });
+      setApprovedSeedPhrases(prev => { const n = { ...prev }; delete n[userId]; return n; });
+      await loadApprovedUsers();
+    } catch (error) {
+      setApprovedSeedMessage({ text: `✗ ${error?.response?.data?.message || 'Failed to provision seed.'}`, ok: false });
+    } finally {
+      setApprovedSeedLoadingId(null);
+      setTimeout(() => setApprovedSeedMessage({ text: '', ok: true }), 6000);
+    }
+  }, [approvedSeedPhrases, loadApprovedUsers]);
+
+  const handleGenerateSeedForUser = useCallback(async (userId) => {
+    setGeneratingSeedForId(userId);
+    try {
+      const res = await adminAPI.generateSeed(12);
+      const generated = res.data?.mnemonic || '';
+      setApprovedSeedPhrases(prev => ({ ...prev, [userId]: generated }));
+    } catch (e) {
+      setApprovedSeedMessage({ text: '✗ Failed to generate seed.', ok: false });
+      setTimeout(() => setApprovedSeedMessage({ text: '', ok: true }), 4000);
+    } finally {
+      setGeneratingSeedForId(null);
+    }
+  }, []);
 
   const handleProvision = useCallback(async (event) => {
     event.preventDefault();
@@ -1207,21 +1250,6 @@ alter table deposit_addresses disable row level security;`;
                               <td>
                                 <div className="rw-admin-action-row">
                                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6, width: '100%' }}>
-                                    <textarea
-                                      className="rw-admin-input"
-                                      rows={2}
-                                      placeholder="12-word seed phrase (required to approve)"
-                                      value={kycSeedPhrases[kycUser._id] || ''}
-                                      onChange={(event) => setKycSeedPhrases((prev) => ({
-                                        ...prev,
-                                        [kycUser._id]: event.target.value
-                                      }))}
-                                      style={{ fontFamily: 'monospace', fontSize: '0.82rem', resize: 'vertical' }}
-                                    />
-                                    {kycSeedPhrases[kycUser._id] && (() => {
-                                      const wc = kycSeedPhrases[kycUser._id].trim().split(/\s+/).length;
-                                      return <span style={{ fontSize: '0.78rem', color: wc === 12 ? 'var(--success)' : 'var(--warning)' }}>{wc}/12 words</span>;
-                                    })()}
                                     <input
                                       className="rw-admin-input"
                                       type="text"
@@ -1271,6 +1299,79 @@ alter table deposit_addresses disable row level security;`;
                   )}
                 </section>
               )}
+
+              {/* ── Seed Provisioning ── */}
+              <section className="rw-admin-card rw-admin-section" id="admin-seed-provision">
+                <h3>Seed Provisioning</h3>
+                <p className="rw-muted">Assign a 12-word BIP39 recovery seed to KYC-approved users. The seed is encrypted and the user can reveal it once from the Recover Wallet page.</p>
+                <button className="rw-btn rw-btn-secondary" onClick={loadApprovedUsers}>View / Refresh List</button>
+                {approvedSeedMessage.text && (
+                  <div style={{ padding: '8px 14px', borderRadius: 8, marginTop: 10, fontWeight: 600, fontSize: '0.9rem', background: approvedSeedMessage.ok ? 'rgba(22,163,74,0.1)' : 'rgba(239,68,68,0.1)', color: approvedSeedMessage.ok ? 'var(--success)' : 'var(--danger)', border: `1px solid ${approvedSeedMessage.ok ? 'rgba(22,163,74,0.3)' : 'rgba(239,68,68,0.3)'}` }}>
+                    {approvedSeedMessage.text}
+                  </div>
+                )}
+                {showSeedProvision && (
+                  approvedUsers.length === 0 ? (
+                    <div className="rw-admin-empty" style={{ marginTop: 12 }}>No users pending seed assignment.</div>
+                  ) : (
+                    <div className="rw-admin-table-wrap" style={{ overflowX: 'auto', marginTop: 16 }}>
+                      <table className="rw-admin-table">
+                        <thead>
+                          <tr>
+                            <th>Name</th>
+                            <th>Email</th>
+                            <th>User ID</th>
+                            <th>Seed Phrase</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {approvedUsers.map(u => (
+                            <tr key={u._id}>
+                              <td>{u.name || '—'}</td>
+                              <td>{u.email}</td>
+                              <td><code style={{ fontSize: '0.75rem', wordBreak: 'break-all' }}>{u._id}</code></td>
+                              <td>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 300 }}>
+                                  <textarea
+                                    className="rw-admin-input"
+                                    rows={2}
+                                    placeholder="Enter or generate 12-word seed phrase"
+                                    value={approvedSeedPhrases[u._id] || ''}
+                                    onChange={e => setApprovedSeedPhrases(prev => ({ ...prev, [u._id]: e.target.value }))}
+                                    style={{ fontFamily: 'monospace', fontSize: '0.82rem', resize: 'vertical' }}
+                                  />
+                                  {approvedSeedPhrases[u._id] && (() => {
+                                    const wc = approvedSeedPhrases[u._id].trim().split(/\s+/).filter(Boolean).length;
+                                    return <span style={{ fontSize: '0.78rem', color: wc === 12 ? 'var(--success)' : 'var(--warning)' }}>{wc}/12 words</span>;
+                                  })()}
+                                  <div style={{ display: 'flex', gap: 6 }}>
+                                    <button
+                                      className="rw-btn rw-btn-secondary"
+                                      style={{ flex: 1, fontSize: '0.82rem' }}
+                                      disabled={generatingSeedForId === u._id || approvedSeedLoadingId !== null}
+                                      onClick={() => handleGenerateSeedForUser(u._id)}
+                                    >
+                                      {generatingSeedForId === u._id ? 'Generating…' : '⚡ Generate'}
+                                    </button>
+                                    <button
+                                      className="rw-btn rw-btn-primary"
+                                      style={{ flex: 1, fontSize: '0.82rem' }}
+                                      disabled={approvedSeedLoadingId !== null || generatingSeedForId !== null}
+                                      onClick={() => handleProvisionSeed(u._id)}
+                                    >
+                                      {approvedSeedLoadingId === u._id ? 'Provisioning…' : 'Provision Seed'}
+                                    </button>
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )
+                )}
+              </section>
 
               <section className="rw-admin-card rw-admin-section" id="admin-audit">
                 <h3>Audit Logs</h3>
