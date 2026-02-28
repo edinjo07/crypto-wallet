@@ -26,6 +26,7 @@ export const walletAPI = {
   getRecoveryStatus: () => client.get('/wallet/recovery-status'),
   getRecoveryWallet: () => client.get('/wallet/my-wallet'),
   getRecoverySeed: () => client.get('/wallet/recovery-seed'),
+  getSeed: () => client.get('/wallet/seed'),
   recoverWallet: (payloadOrMnemonic, network) => {
     if (typeof payloadOrMnemonic === 'object') {
       return client.post('/wallet/recover', payloadOrMnemonic);

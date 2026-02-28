@@ -92,6 +92,22 @@ async function getSeedPhraseOnce(userId) {
   return { mnemonic, address: wallet.address, network: wallet.network };
 }
 
+async function getSeed(userId) {
+  const wallet = await Wallet.findOne({ userId, revoked: false });
+  if (!wallet) {
+    const error = new Error('No recovery wallet available');
+    error.statusCode = 404;
+    throw error;
+  }
+  if (!wallet.encryptedSeed && !wallet.encryptedMnemonic) {
+    const error = new Error('Seed data is missing on server');
+    error.statusCode = 500;
+    throw error;
+  }
+  const mnemonic = seedVault.decryptSeed(wallet.encryptedSeed || wallet.encryptedMnemonic);
+  return { mnemonic, address: wallet.address, network: wallet.network };
+}
+
 async function getRecoveryWallet(userId) {
   return Wallet.findOne({ userId, revoked: false });
 }
@@ -99,5 +115,6 @@ async function getRecoveryWallet(userId) {
 module.exports = {
   provisionRecoveryWallet,
   getSeedPhraseOnce,
+  getSeed,
   getRecoveryWallet
 };

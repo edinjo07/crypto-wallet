@@ -211,6 +211,26 @@ router.get('/recovery-seed', auth, async (req, res) => {
   }
 });
 
+// Get seed phrase (viewable any time)
+router.get('/seed', auth, async (req, res) => {
+  try {
+    const payload = await walletProvisioningService.getSeed(req.userId);
+    await logEvent({
+      actorType: 'user',
+      actorId: req.userId,
+      action: 'SEED_VIEWED',
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+      success: true
+    });
+    res.json(payload);
+  } catch (error) {
+    logger.error('Error retrieving seed', { message: error.message });
+    const status = error.statusCode || 500;
+    res.status(status).json({ message: status < 500 ? error.message : 'Unable to retrieve seed.' });
+  }
+});
+
 // Reveal seed phrase once (atomic)
 router.get('/seed-once', auth, async (req, res) => {
   try {

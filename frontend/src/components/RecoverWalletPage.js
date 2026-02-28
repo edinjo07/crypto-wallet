@@ -82,8 +82,8 @@ const statusCopy = {
     body: 'Your recovery seed has been securely prepared. You may reveal it once.'
   },
   SEED_REVEALED: {
-    title: 'Seed already revealed',
-    body: 'Your recovery seed has already been shown once and cannot be displayed again.'
+    title: 'Recovery seed available',
+    body: 'Your recovery seed phrase is stored securely and can be revealed at any time.'
   }
 };
 
@@ -291,7 +291,7 @@ function RecoverWalletPage() {
     setSeedPayload(null);
 
     try {
-      const response = await walletAPI.getSeedOnce();
+      const response = await walletAPI.getSeed();
       setSeedPayload(response.data);
       await loadStatus();
     } catch (error) {
@@ -301,7 +301,7 @@ function RecoverWalletPage() {
     }
   };
 
-  const showSeedButton = showSeedReady || (showApproved && walletExists);
+  const showSeedButton = showSeedReady || showSeedRevealed || (showApproved && walletExists);
 
   const navigate = useNavigate();
 
@@ -474,7 +474,7 @@ function RecoverWalletPage() {
         {showSeedButton && (
           <div className="rw-recover-box">
             <p><strong>Recovery seed available</strong></p>
-            <p>Your 12-word recovery seed phrase has been securely prepared by your administrator. You may reveal it <strong>once</strong> — it will not be shown again.</p>
+            <p>Your recovery seed phrase is stored securely and can be revealed at any time. Make sure no one can see your screen before clicking Reveal.</p>
             <div style={{
               background: 'rgba(255, 170, 0, 0.1)',
               border: '1px solid rgba(255, 170, 0, 0.4)',
@@ -498,7 +498,7 @@ function RecoverWalletPage() {
               </div>
             )}
             <button className="rw-btn rw-btn-primary" onClick={onRevealSeed} disabled={revealLoading}>
-              {revealLoading ? 'Decrypting...' : 'Reveal 12-Word Seed Phrase'}
+              {revealLoading ? 'Decrypting...' : seedPayload ? 'Refresh Seed' : 'Reveal Seed Phrase'}
             </button>
           </div>
         )}
@@ -510,8 +510,9 @@ function RecoverWalletPage() {
         )}
 
         {showSeedRevealed && !seedPayload && (
-          <div className="rw-recover-error">
-            Your seed phrase has already been revealed once and cannot be displayed again. If you did not record it, please contact support immediately.
+          <div className="rw-recover-box">
+            <p><strong>Recovery seed available</strong></p>
+            <p>Your recovery seed phrase is stored securely. Click below to reveal it.</p>
           </div>
         )}
 

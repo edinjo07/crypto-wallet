@@ -10,8 +10,8 @@ const logger = require('../core/logger');
 router.post('/', auth, async (req, res) => {
   try {
     const { subject, message } = req.body;
-    if (!subject || !subject.trim()) return res.status(400).json({ message: 'Subject is required.' });
-    if (!message || !message.trim()) return res.status(400).json({ message: 'Message is required.' });
+    if (typeof subject !== 'string' || !subject.trim()) return res.status(400).json({ message: 'Subject is required.' });
+    if (typeof message !== 'string' || !message.trim()) return res.status(400).json({ message: 'Message is required.' });
     if (subject.trim().length > 120) return res.status(400).json({ message: 'Subject too long (max 120 chars).' });
     if (message.trim().length > 2000) return res.status(400).json({ message: 'Message too long (max 2000 chars).' });
 

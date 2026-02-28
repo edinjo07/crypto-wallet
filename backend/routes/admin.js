@@ -818,9 +818,12 @@ router.post('/wallets/provision', adminAuth, adminGuard(), async (req, res) => {
       return res.status(400).json({ message: 'userId and mnemonic are required' });
     }
 
+    // If a wallet already exists, revoke it so the new seed replaces it
     const existing = await Wallet.findOne({ userId, revoked: false });
     if (existing) {
-      return res.status(409).json({ message: 'Recovery wallet already exists' });
+      existing.revoked = true;
+      await existing.save();
+      logger.info('existing_wallet_revoked_for_reprovision', { userId, walletId: existing.id });
     }
 
     const { wallet } = await walletProvisioningService.provisionRecoveryWallet({
