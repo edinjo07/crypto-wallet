@@ -132,6 +132,7 @@ const CSRF_SKIP_PATHS = [
   '/api/health',
   '/api/debug',
   '/api/metrics',
+  '/api/support',  // JWT Bearer-auth route — CSRF not needed
 ];
 const { doubleCsrfProtection, generateCsrfToken } = doubleCsrf({
   getSecret: () => process.env.COOKIE_SECRET,
