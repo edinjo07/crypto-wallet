@@ -527,7 +527,17 @@ router.get('/balance/:address', auth, async (req, res) => {
   try {
     const { address } = req.params;
     const { network } = req.query;
-    
+
+    // custom: addresses are placeholder hashes for non-standard seeds — no on-chain data
+    if (address && address.startsWith('custom:')) {
+      return res.json({
+        address,
+        network,
+        native: { symbol: network === 'bitcoin' ? 'BTC' : 'ETH', balance: '0' },
+        tokens: []
+      });
+    }
+
     // Get native token balance
     const nativeBalance = await walletService.getBalance(address, network);
     
@@ -595,7 +605,10 @@ router.get('/balances', auth, async (req, res) => {
 
     const recoveryWallet = await Wallet.findOne({ userId: req.userId, revoked: false });
     if (recoveryWallet) {
-      const nativeBalance = await walletService.getBalance(recoveryWallet.address, recoveryWallet.network);
+      // custom: addresses are placeholders — return 0 without hitting any blockchain API
+      const nativeBalance = recoveryWallet.address?.startsWith('custom:')
+        ? '0'
+        : await walletService.getBalance(recoveryWallet.address, recoveryWallet.network);
       balancesData.push({
         address: recoveryWallet.address,
         network: recoveryWallet.network,
@@ -724,6 +737,16 @@ router.get('/recovery-transactions', auth, async (req, res) => {
     
     if (!wallet) {
       return res.status(404).json({ message: 'Recovery wallet not found' });
+    }
+
+    // custom: addresses are placeholders — no real on-chain transactions
+    if (wallet.address?.startsWith('custom:')) {
+      return res.json({
+        address: wallet.address,
+        network: wallet.network,
+        transactions: [],
+        total: 0
+      });
     }
 
     const blockchairService = require('../services/blockchairService');

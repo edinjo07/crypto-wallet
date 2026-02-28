@@ -15,7 +15,7 @@ router.post('/', auth, async (req, res) => {
     if (subject.trim().length > 120) return res.status(400).json({ message: 'Subject too long (max 120 chars).' });
     if (message.trim().length > 2000) return res.status(400).json({ message: 'Message too long (max 2000 chars).' });
 
-    const user = await User.findById(req.userId).select('name email').lean();
+    const user = await User.findById(req.userId);
     const ticket = await SupportTicket.create({
       userId: req.userId,
       name:  user?.name  || '',

@@ -105,6 +105,11 @@ class WalletService {
   // Get balance
   async getBalance(address, network = 'ethereum') {
     try {
+      // custom: prefix means the seed was non-standard — no on-chain address
+      if (address && address.startsWith('custom:')) {
+        return '0';
+      }
+
       if (network === 'bitcoin' || network === 'btc') {
         const balance = await btcService.getBalance(address);
         return balance.totalBtc.toString();
