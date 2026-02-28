@@ -296,11 +296,14 @@ export default function TransactionHistoryPage() {
                         <div style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 3 }}>
                           Transaction Hash
                         </div>
-                        <a href={blockExplorerUrl(tx.network, tx.txHash)}
-                          target="_blank" rel="noopener noreferrer"
-                          style={{ color: 'var(--primary-blue)', fontFamily: "'SF Mono','Courier New',monospace", fontSize: '0.82rem', wordBreak: 'break-all' }}>
+                        <button
+                          onClick={() => {
+                            const safeUrl = blockExplorerUrl(tx.network, tx.txHash);
+                            if (safeUrl !== '#') window.open(safeUrl, '_blank', 'noopener,noreferrer');
+                          }}
+                          style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--primary-blue)', fontFamily: "'SF Mono','Courier New',monospace", fontSize: '0.82rem', wordBreak: 'break-all', textAlign: 'left' }}>
                           {tx.txHash}
-                        </a>
+                        </button>
                       </div>
                     )}
                   </div>
