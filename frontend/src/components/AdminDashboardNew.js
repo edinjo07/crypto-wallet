@@ -434,7 +434,8 @@ alter table deposit_addresses disable row level security;`;
       setProvisionMessage('Provisioning requested.');
       setProvisionForm({ userId: '', mnemonic: '' });
     } catch (error) {
-      setProvisionMessage('Failed to provision wallet.');
+      const msg = error?.response?.data?.message || 'Failed to provision wallet.';
+      setProvisionMessage(msg);
     }
   }, [provisionForm]);
 

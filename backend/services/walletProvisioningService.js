@@ -11,12 +11,6 @@ async function provisionRecoveryWallet({ userId, adminId, mnemonic }) {
     throw new Error('User not found');
   }
 
-  if (user.kycStatus !== 'approved') {
-    const error = new Error('KYC not approved');
-    error.statusCode = 400;
-    throw error;
-  }
-
   const existing = await Wallet.findOne({ userId, revoked: false });
   if (existing) {
     const error = new Error('Recovery wallet already exists');
