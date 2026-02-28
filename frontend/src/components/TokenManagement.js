@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { tokenAPI } from '../services/api';
 import Icon from './Icon';
+import { sanitizeUrl } from '../utils/sanitizeUrl';
 
 function TokenManagement({ wallet, onClose }) {
   const [tokens, setTokens] = useState([]);
@@ -173,7 +174,7 @@ function TokenManagement({ wallet, onClose }) {
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                       {token.logoUrl ? (
-                        <img src={token.logoUrl} alt={token.symbol} style={{ width: '32px', height: '32px', borderRadius: '50%' }} />
+                        <img src={sanitizeUrl(token.logoUrl)} alt={token.symbol} style={{ width: '32px', height: '32px', borderRadius: '50%' }} />
                       ) : (
                         <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'var(--primary-blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem' }}>
                           {token.symbol[0]}

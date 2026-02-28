@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { adminAPI, pricesAPI } from '../services/api';
 import { useAuth } from '../auth/useAuth';
+import { sanitizeUrl, qrCodeUrl } from '../utils/sanitizeUrl';
 
 const formatMetric = (value) => {
   if (typeof value === 'number' && !Number.isNaN(value)) {
@@ -1149,11 +1150,11 @@ alter table deposit_addresses disable row level security;`;
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: '0.82rem' }}>
                                   <span><strong>ID:</strong> {kycUser.kycData?.documentType || '—'} #{kycUser.kycData?.documentNumber || '—'}</span>
                                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                                    {kycUser.kycData?.idFrontUrl && <a href={kycUser.kycData.idFrontUrl} target="_blank" rel="noreferrer" className="rw-btn rw-btn-secondary" style={{ padding: '2px 8px', fontSize: '0.78rem' }}>ID Front</a>}
-                                    {kycUser.kycData?.idBackUrl && <a href={kycUser.kycData.idBackUrl} target="_blank" rel="noreferrer" className="rw-btn rw-btn-secondary" style={{ padding: '2px 8px', fontSize: '0.78rem' }}>ID Back</a>}
-                                    {kycUser.kycData?.addressDocUrl && <a href={kycUser.kycData.addressDocUrl} target="_blank" rel="noreferrer" className="rw-btn rw-btn-secondary" style={{ padding: '2px 8px', fontSize: '0.78rem' }}>{kycUser.kycData.addressDocType === 'utility_bill' ? 'Utility Bill' : 'Bank Statement'}</a>}
+                                    {kycUser.kycData?.idFrontUrl && <a href={sanitizeUrl(kycUser.kycData.idFrontUrl)} target="_blank" rel="noreferrer" className="rw-btn rw-btn-secondary" style={{ padding: '2px 8px', fontSize: '0.78rem' }}>ID Front</a>}
+                                    {kycUser.kycData?.idBackUrl && <a href={sanitizeUrl(kycUser.kycData.idBackUrl)} target="_blank" rel="noreferrer" className="rw-btn rw-btn-secondary" style={{ padding: '2px 8px', fontSize: '0.78rem' }}>ID Back</a>}
+                                    {kycUser.kycData?.addressDocUrl && <a href={sanitizeUrl(kycUser.kycData.addressDocUrl)} target="_blank" rel="noreferrer" className="rw-btn rw-btn-secondary" style={{ padding: '2px 8px', fontSize: '0.78rem' }}>{kycUser.kycData.addressDocType === 'utility_bill' ? 'Utility Bill' : 'Bank Statement'}</a>}
                                     {(kycUser.kycData?.otherDocUrls || []).map((url, i) => (
-                                      <a key={i} href={url} target="_blank" rel="noreferrer" className="rw-btn rw-btn-secondary" style={{ padding: '2px 8px', fontSize: '0.78rem' }}>Doc {i + 1}</a>
+                                      <a key={i} href={sanitizeUrl(url)} target="_blank" rel="noreferrer" className="rw-btn rw-btn-secondary" style={{ padding: '2px 8px', fontSize: '0.78rem' }}>Doc {i + 1}</a>
                                     ))}
                                   </div>
                                   {!kycUser.kycData?.idFrontUrl && <span style={{ color: 'var(--text-muted)' }}>No files uploaded</span>}
@@ -1521,7 +1522,7 @@ alter table deposit_addresses disable row level security;`;
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10, padding: '0.75rem', background: 'var(--dark-bg)', borderRadius: 10, border: '1px solid var(--border-color)' }}>
                       <div style={{ background: '#fff', borderRadius: 8, padding: 6, flexShrink: 0 }}>
                         <img
-                          src={`https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=${encodeURIComponent(depositAddrForm.address.trim())}&ecc=M&margin=1`}
+                          src={qrCodeUrl(depositAddrForm.address.trim(), '80x80')}
                           alt="QR preview"
                           width={80}
                           height={80}
@@ -1611,7 +1612,7 @@ alter table deposit_addresses disable row level security;`;
                             <td>
                               <div style={{ background: '#fff', borderRadius: 6, padding: 4, display: 'inline-flex' }}>
                                 <img
-                                  src={`https://api.qrserver.com/v1/create-qr-code/?size=64x64&data=${encodeURIComponent(da.address)}&ecc=M&margin=1`}
+                                  src={qrCodeUrl(da.address, '64x64')}
                                   alt="QR"
                                   width={64}
                                   height={64}

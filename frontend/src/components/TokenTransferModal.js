@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { tokenAPI } from '../services/api';
 import Icon from './Icon';
+import { sanitizeUrl } from '../utils/sanitizeUrl';
 
 function TokenTransferModal({ wallet, token, onClose, onSuccess }) {
   const [recipient, setRecipient] = useState('');
@@ -84,7 +85,7 @@ function TokenTransferModal({ wallet, token, onClose, onSuccess }) {
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.75rem' }}>
               {token.logoUrl ? (
-                <img src={token.logoUrl} alt={token.symbol} style={{ width: '40px', height: '40px', borderRadius: '50%' }} />
+                <img src={sanitizeUrl(token.logoUrl)} alt={token.symbol} style={{ width: '40px', height: '40px', borderRadius: '50%' }} />
               ) : (
                 <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'var(--primary-blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem' }}>
                   {token.symbol[0]}

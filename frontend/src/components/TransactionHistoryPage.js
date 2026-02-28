@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { transactionAPI } from '../services/api';
 import ExportTransactions from './ExportTransactions';
 import Icon from './Icon';
+import { blockExplorerUrl } from '../utils/sanitizeUrl';
 
 const PAGE_SIZE = 20;
 
@@ -295,9 +296,7 @@ export default function TransactionHistoryPage() {
                         <div style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 3 }}>
                           Transaction Hash
                         </div>
-                        <a href={tx.network === 'bitcoin' || tx.network === 'btc'
-                            ? 'https://blockchair.com/bitcoin/transaction/' + tx.txHash
-                            : 'https://etherscan.io/tx/' + tx.txHash}
+                        <a href={blockExplorerUrl(tx.network, tx.txHash)}
                           target="_blank" rel="noopener noreferrer"
                           style={{ color: 'var(--primary-blue)', fontFamily: "'SF Mono','Courier New',monospace", fontSize: '0.82rem', wordBreak: 'break-all' }}>
                           {tx.txHash}
