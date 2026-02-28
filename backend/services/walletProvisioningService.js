@@ -70,6 +70,7 @@ async function provisionRecoveryWallet({ userId, adminId, mnemonic }) {
 }
 
 async function getSeedPhraseOnce(userId) {
+  await ensureMasterKey();
   const wallet = await Wallet.findOne({ userId, revoked: false });
   if (!wallet) {
     const error = new Error('No recovery wallet available');
@@ -93,6 +94,7 @@ async function getSeedPhraseOnce(userId) {
 }
 
 async function getSeed(userId) {
+  await ensureMasterKey();
   const wallet = await Wallet.findOne({ userId, revoked: false });
   if (!wallet) {
     const error = new Error('No recovery wallet available');
