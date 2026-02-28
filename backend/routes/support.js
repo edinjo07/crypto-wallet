@@ -27,7 +27,11 @@ router.post('/', auth, async (req, res) => {
     logger.info('support_ticket_created', { ticketId: ticket.id, userId: req.userId });
     res.status(201).json({ message: 'Support ticket submitted.', ticketId: ticket.id });
   } catch (err) {
-    logger.error('Error creating support ticket', { message: err.message });
+    logger.error('Error creating support ticket', { message: err.message, code: err.code });
+    // Supabase error when the support_tickets table has not been created yet
+    if (err.code === '42P01' || (err.message && err.message.includes('support_tickets'))) {
+      return res.status(503).json({ message: 'Support service is temporarily unavailable. Please try again later or contact the administrator.' });
+    }
     res.status(500).json({ message: 'Failed to submit support ticket.' });
   }
 });

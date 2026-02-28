@@ -110,6 +110,8 @@ function RecoverWalletPage() {
   const [submitMessage, setSubmitMessage] = useState('');
   const [revealLoading, setRevealLoading] = useState(false);
   const [seedPayload, setSeedPayload] = useState(null);
+  const [seedsVisible, setSeedsVisible] = useState(false);
+  const [copied, setCopied] = useState(false);
   const [uploadProgress, setUploadProgress] = useState('');
 
   const statusText = statusCopy[status] || statusCopy.NO_KYC;
@@ -498,27 +500,76 @@ function RecoverWalletPage() {
             <div className="rw-recover-seed-warning">
               ⚠️ <strong>Save these 12 words immediately.</strong> Write them down on paper and store them offline in a safe location. This phrase <strong>will NOT be shown again</strong> — it is the only way to recover your wallet.
             </div>
-            <div className="rw-recover-seed-grid">
-              {seedPayload.mnemonic.trim().split(/\s+/).map((word, i) => (
-                <div key={i} className="rw-recover-seed-word">
-                  <span className="rw-recover-seed-num">{i + 1}</span>
-                  <span className="rw-recover-seed-word-text">{word}</span>
+
+            {/* Hidden-by-default seed grid */}
+            <div
+              style={{
+                position: 'relative',
+                borderRadius: 12,
+                overflow: 'hidden',
+                marginBottom: 12,
+              }}
+            >
+              <div
+                className="rw-recover-seed-grid"
+                style={{
+                  filter: seedsVisible ? 'none' : 'blur(8px)',
+                  userSelect: seedsVisible ? 'text' : 'none',
+                  pointerEvents: seedsVisible ? 'auto' : 'none',
+                  transition: 'filter 0.3s ease',
+                }}
+              >
+                {seedPayload.mnemonic.trim().split(/\s+/).map((word, i) => (
+                  <div key={i} className="rw-recover-seed-word">
+                    <span className="rw-recover-seed-num">{i + 1}</span>
+                    <span className="rw-recover-seed-word-text">{word}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Overlay shown when hidden */}
+              {!seedsVisible && (
+                <div style={{
+                  position: 'absolute', inset: 0,
+                  display: 'flex', flexDirection: 'column',
+                  alignItems: 'center', justifyContent: 'center',
+                  background: 'rgba(0,0,0,0.35)',
+                  borderRadius: 12,
+                  gap: 8,
+                  zIndex: 2,
+                }}>
+                  <span style={{ fontSize: '1.6rem' }}>🔒</span>
+                  <span style={{ color: '#fff', fontWeight: 600, fontSize: '0.92rem' }}>Seed phrase hidden</span>
+                  <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.8rem', textAlign: 'center', maxWidth: 220 }}>Make sure no one can see your screen, then tap Reveal</span>
                 </div>
-              ))}
+              )}
             </div>
+
+            {/* Reveal / Hide toggle */}
+            <button
+              className={`rw-btn ${seedsVisible ? 'rw-btn-secondary' : 'rw-btn-primary'}`}
+              style={{ width: '100%', marginBottom: 8 }}
+              onClick={() => setSeedsVisible(v => !v)}
+            >
+              {seedsVisible ? '🙈 Hide Seed Phrase' : '👁 Show Seed Phrase'}
+            </button>
+
+            {/* Copy button */}
             <button
               className="rw-btn rw-btn-secondary"
-              style={{ marginTop: '1rem' }}
+              style={{ width: '100%' }}
               onClick={() => {
                 navigator.clipboard.writeText(seedPayload.mnemonic).then(() => {
-                  alert('Seed phrase copied to clipboard. Paste it somewhere secure now.');
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 3000);
                 }).catch(() => {});
               }}
             >
-              Copy All 12 Words
+              {copied ? '✅ Copied!' : '📋 Copy All 12 Words'}
             </button>
+
             <div className="rw-recover-seed-tip">
-              💡 Do not store this phrase in email, cloud storage, or screenshots. Consider writing it on paper and keeping it in a secure location like a safe.
+              💡 Do not store this phrase in email, cloud storage, or screenshots. Write it on paper and keep it in a secure location like a safe.
             </div>
           </div>
         )}
