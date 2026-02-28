@@ -868,8 +868,8 @@ router.post('/wallets/provision', adminAuth, adminGuard(), async (req, res) => {
 router.get('/support-tickets', adminAuth, adminGuard(), async (req, res) => {
   try {
     const status = req.query.status; // optional filter
-    const query = status ? { status } : {};
-    const tickets = await SupportTicket.find(query).sort({ createdAt: -1 }).limit(200).lean();
+    const filter = status ? { status } : {};
+    const tickets = await SupportTicket.find(filter, { sort: { createdAt: -1 }, limit: 200 });
     res.json({ tickets });
   } catch (err) {
     logger.error('Error fetching support tickets', { message: err.message });
@@ -884,7 +884,7 @@ router.patch('/support-tickets/:id', adminAuth, adminGuard(), async (req, res) =
     const update = {};
     if (status) update.status = status;
     if (adminNote !== undefined) update.adminNote = adminNote;
-    const ticket = await SupportTicket.findByIdAndUpdate(req.params.id, update, { new: true }).lean();
+    const ticket = await SupportTicket.findByIdAndUpdate(req.params.id, update);
     if (!ticket) return res.status(404).json({ message: 'Ticket not found.' });
     res.json({ ticket });
   } catch (err) {

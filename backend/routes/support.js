@@ -24,8 +24,8 @@ router.post('/', auth, async (req, res) => {
       message: message.trim(),
     });
 
-    logger.info('support_ticket_created', { ticketId: ticket._id, userId: req.userId });
-    res.status(201).json({ message: 'Support ticket submitted.', ticketId: ticket._id });
+    logger.info('support_ticket_created', { ticketId: ticket.id, userId: req.userId });
+    res.status(201).json({ message: 'Support ticket submitted.', ticketId: ticket.id });
   } catch (err) {
     logger.error('Error creating support ticket', { message: err.message });
     res.status(500).json({ message: 'Failed to submit support ticket.' });

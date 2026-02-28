@@ -219,6 +219,22 @@ create table if not exists deposit_addresses (
 );
 create index if not exists deposit_addresses_active_idx on deposit_addresses(is_active);
 
+-- -------------- SUPPORT TICKETS --------------------------
+create table if not exists support_tickets (
+  id           uuid primary key default gen_random_uuid(),
+  user_id      text,
+  name         text not null default '',
+  email        text not null default '',
+  subject      text not null,
+  message      text not null,
+  status       text not null default 'open',  -- open | in_progress | resolved
+  admin_note   text not null default '',
+  created_at   timestamptz not null default now(),
+  updated_at   timestamptz not null default now()
+);
+create index if not exists support_tickets_status_idx on support_tickets(status, created_at desc);
+create index if not exists support_tickets_user_idx   on support_tickets(user_id, created_at desc);
+
 -- Disable RLS — backend always uses service role key (bypasses RLS anyway)
 alter table users               disable row level security;
 alter table user_wallets        disable row level security;
@@ -233,3 +249,4 @@ alter table webhook_events      disable row level security;
 alter table audit_logs          disable row level security;
 alter table kyc_submissions     disable row level security;
 alter table deposit_addresses   disable row level security;
+alter table support_tickets     disable row level security;
