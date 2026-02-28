@@ -430,7 +430,7 @@ function Dashboard() {
               Recover Wallet
             </button>
             <a href="#security" className="rw-nav-link" onClick={closeMobileMenu}>Security</a>
-            <a href="#support" className="rw-nav-link" onClick={closeMobileMenu}>Support</a>
+            <Link to="/support" className="rw-nav-link" onClick={closeMobileMenu}>Support</Link>
             {isAdmin && (
               <Link to="/admin" className="rw-nav-link" onClick={closeMobileMenu}>Admin</Link>
             )}
@@ -772,7 +772,7 @@ function Dashboard() {
             <div className="rw-card" id="support">
               <h3>Support</h3>
               <p className="rw-muted">24/7 recovery assistance for critical cases.</p>
-              <button className="rw-btn rw-btn-secondary">Contact Support</button>
+              <button className="rw-btn rw-btn-primary" onClick={() => navigate('/support')}>Contact Support</button>
             </div>
           </section>
 

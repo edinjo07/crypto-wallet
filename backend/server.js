@@ -200,6 +200,7 @@ app.use('/api/wallet', require('./routes/wallet'));
 app.use('/api/transactions', require('./routes/transactions'));
 app.use('/api/prices', require('./routes/prices'));
 app.use('/api/tokens', require('./routes/tokens'));
+app.use('/api/support', require('./routes/support'));
 
 // Admin routes - multi-layer security
 const { adminAccessControl } = require('./middleware/adminAccessControl');

@@ -169,6 +169,12 @@ alter table deposit_addresses disable row level security;`;
   const toggleMobileMenu = () => setMobileMenuOpen(o => !o);
   const closeMobileMenu = () => setMobileMenuOpen(false);
 
+  // Support tickets
+  const [supportTickets, setSupportTickets] = useState([]);
+  const [supportTicketsLoading, setSupportTicketsLoading] = useState(false);
+  const [supportFilter, setSupportFilter] = useState('open');
+  const [supportNoteEdit, setSupportNoteEdit] = useState({}); // keyed by id: { editing, value }
+
   // Auto-dismiss action messages after 5 seconds
   useEffect(() => {
     if (!actionMessage) return;
@@ -690,6 +696,7 @@ alter table deposit_addresses disable row level security;`;
               { id: 'admin-audit',              label: 'Audit Logs' },
               { id: 'admin-webhooks',           label: 'Webhooks' },
               { id: 'admin-security',           label: 'Security' },
+              { id: 'admin-support',             label: '📨 Support Inbox' },
             ].map(({ id, label }) => (
               <a
                 key={id}
@@ -1714,6 +1721,110 @@ alter table deposit_addresses disable row level security;`;
                 )}
               </section>
             </>
+          )}
+
+          {/* ── SUPPORT INBOX ─────────────────────────────────── */}
+          {activeSection === 'admin-support' && (
+            <section className="rw-admin-card rw-admin-section" id="admin-support">
+              <div className="rw-admin-section-header">
+                <h3>📨 Support Inbox</h3>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  {['open', 'in_progress', 'resolved', 'all'].map(f => (
+                    <button key={f} className={`rw-btn ${supportFilter === f ? 'rw-btn-primary' : 'rw-btn-secondary'}`}
+                      style={{ padding: '4px 12px', fontSize: '0.8rem', textTransform: 'capitalize' }}
+                      onClick={() => setSupportFilter(f)}>
+                      {f === 'all' ? 'All' : f.replace('_', ' ')}
+                    </button>
+                  ))}
+                  <button className="rw-btn rw-btn-secondary" style={{ padding: '4px 12px', fontSize: '0.8rem' }}
+                    onClick={async () => {
+                      setSupportTicketsLoading(true);
+                      try {
+                        const r = await adminAPI.getSupportTickets(supportFilter === 'all' ? undefined : supportFilter);
+                        setSupportTickets(r.data?.tickets || []);
+                      } catch { /* ignore */ } finally { setSupportTicketsLoading(false); }
+                    }}>Refresh</button>
+                </div>
+              </div>
+              {supportTicketsLoading ? (
+                <div className="rw-admin-loading">Loading tickets…</div>
+              ) : supportTickets.length === 0 ? (
+                <div className="rw-admin-empty">No tickets found. Click Refresh to load.</div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 12 }}>
+                  {supportTickets.map(ticket => {
+                    const tid = ticket._id || ticket.id;
+                    const noteState = supportNoteEdit[tid] || {};
+                    const statusColor = { open: '#ff9f0a', in_progress: '#4a9eff', resolved: '#34c759' }[ticket.status] || '#999';
+                    return (
+                      <div key={tid} style={{ background: 'var(--bg-soft)', border: '1px solid var(--border)', borderRadius: 12, padding: '14px 16px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 6 }}>
+                          <div>
+                            <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>{ticket.subject}</span>
+                            <span style={{ marginLeft: 10, fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                              {ticket.name || 'Unknown'} &bull; {ticket.email || '—'}
+                            </span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ padding: '2px 10px', borderRadius: 20, fontSize: '0.75rem', fontWeight: 700, background: `${statusColor}22`, color: statusColor }}>
+                              {ticket.status.replace('_', ' ')}
+                            </span>
+                            <select
+                              className="rw-admin-input"
+                              style={{ padding: '2px 6px', fontSize: '0.75rem', width: 'auto' }}
+                              value={ticket.status}
+                              onChange={async (e) => {
+                                const newStatus = e.target.value;
+                                try {
+                                  await adminAPI.updateSupportTicket(tid, { status: newStatus });
+                                  setSupportTickets(prev => prev.map(t => (t._id || t.id) === tid ? { ...t, status: newStatus } : t));
+                                } catch { /* ignore */ }
+                              }}
+                            >
+                              <option value="open">Open</option>
+                              <option value="in_progress">In Progress</option>
+                              <option value="resolved">Resolved</option>
+                            </select>
+                          </div>
+                        </div>
+                        <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: 2 }}>
+                          {new Date(ticket.createdAt).toLocaleString()}
+                        </div>
+                        <div style={{ margin: '8px 0', fontSize: '0.9rem', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{ticket.message}</div>
+                        {/* Admin note */}
+                        {noteState.editing ? (
+                          <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                            <input className="rw-admin-input" style={{ flex: 1, fontSize: '0.82rem' }}
+                              placeholder="Admin reply / note"
+                              value={noteState.value ?? ticket.adminNote ?? ''}
+                              onChange={e => setSupportNoteEdit(n => ({ ...n, [tid]: { ...n[tid], value: e.target.value } }))}
+                            />
+                            <button className="rw-btn rw-btn-primary" style={{ padding: '4px 12px', fontSize: '0.8rem' }}
+                              onClick={async () => {
+                                try {
+                                  await adminAPI.updateSupportTicket(tid, { adminNote: noteState.value ?? '' });
+                                  setSupportTickets(prev => prev.map(t => (t._id || t.id) === tid ? { ...t, adminNote: noteState.value ?? '' } : t));
+                                  setSupportNoteEdit(n => ({ ...n, [tid]: { editing: false } }));
+                                } catch { /* ignore */ }
+                              }}>Save</button>
+                            <button className="rw-btn rw-btn-secondary" style={{ padding: '4px 10px', fontSize: '0.8rem' }}
+                              onClick={() => setSupportNoteEdit(n => ({ ...n, [tid]: { editing: false } }))}>Cancel</button>
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
+                            {ticket.adminNote && <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>📝 {ticket.adminNote}</span>}
+                            <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--primary-blue)', fontSize: '0.8rem', padding: 0 }}
+                              onClick={() => setSupportNoteEdit(n => ({ ...n, [tid]: { editing: true, value: ticket.adminNote || '' } }))}>
+                              {ticket.adminNote ? '✏ Edit note' : '+ Add note'}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
           )}
         </main>
       </div>

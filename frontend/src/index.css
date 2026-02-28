@@ -2885,6 +2885,8 @@ body {
   padding: 32px;
   max-width: 1400px;
   width: 100%;
+  overflow-x: hidden;
+  box-sizing: border-box;
 }
 
 .rw-header {
@@ -2912,7 +2914,7 @@ body {
 
 .rw-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
   gap: 20px;
 }
 
@@ -3950,5 +3952,7 @@ body {
 
   .rw-main {
     padding: 60px 16px 16px;
+    overflow-x: hidden;
+    box-sizing: border-box;
   }
 }

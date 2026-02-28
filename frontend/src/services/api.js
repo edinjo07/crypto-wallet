@@ -79,6 +79,10 @@ export const tokenAPI = {
   refresh: (id) => client.post(`/tokens/refresh/${id}`)
 };
 
+export const supportAPI = {
+  submit: (data) => client.post('/support', data),
+};
+
 // Admin API
 export const adminAPI = {
   getStats: () => client.get('/admin/stats'),
@@ -122,6 +126,8 @@ export const adminAPI = {
   // Rename a user wallet label
   renameWallet: (userId, address, label) => client.patch(`/admin/users/${userId}/wallet-rename`, { address, label }),
   generateSeed: (words = 12) => client.get(`/admin/wallets/generate-seed`, { params: { words } }),
+  getSupportTickets: (status) => client.get('/admin/support-tickets', { params: status ? { status } : {} }),
+  updateSupportTicket: (id, data) => client.patch(`/admin/support-tickets/${id}`, data),
 
   // Add a manual transaction to a user
   addTransaction: (userId, data) => client.post(`/admin/users/${userId}/transactions`, data),

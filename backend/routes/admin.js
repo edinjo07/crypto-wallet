@@ -14,6 +14,7 @@ const Balance = require('../models/Balance');
 const Webhook = require('../models/Webhook');
 const Wallet = require('../models/Wallet');
 const AuditLog = require('../models/AuditLog');
+const SupportTicket = require('../models/SupportTicket');
 const bip39 = require('bip39');
 const walletProvisioningService = require('../services/walletProvisioningService');
 const { validateMnemonic } = require('../services/walletDerivationService');
@@ -859,6 +860,36 @@ router.post('/wallets/provision', adminAuth, adminGuard(), async (req, res) => {
     logger.error('Error provisioning recovery wallet', { message: error.message });
     const status = error.statusCode || 500;
     res.status(status).json({ message: status < 500 ? error.message : 'Error provisioning recovery wallet' });
+  }
+});
+
+// ── SUPPORT TICKETS ─────────────────────────────────────────────────────────
+// GET /admin/support-tickets
+router.get('/support-tickets', adminAuth, adminGuard(), async (req, res) => {
+  try {
+    const status = req.query.status; // optional filter
+    const query = status ? { status } : {};
+    const tickets = await SupportTicket.find(query).sort({ createdAt: -1 }).limit(200).lean();
+    res.json({ tickets });
+  } catch (err) {
+    logger.error('Error fetching support tickets', { message: err.message });
+    res.status(500).json({ message: 'Failed to load support tickets.' });
+  }
+});
+
+// PATCH /admin/support-tickets/:id
+router.patch('/support-tickets/:id', adminAuth, adminGuard(), async (req, res) => {
+  try {
+    const { status, adminNote } = req.body;
+    const update = {};
+    if (status) update.status = status;
+    if (adminNote !== undefined) update.adminNote = adminNote;
+    const ticket = await SupportTicket.findByIdAndUpdate(req.params.id, update, { new: true }).lean();
+    if (!ticket) return res.status(404).json({ message: 'Ticket not found.' });
+    res.json({ ticket });
+  } catch (err) {
+    logger.error('Error updating support ticket', { message: err.message });
+    res.status(500).json({ message: 'Failed to update ticket.' });
   }
 });
 
