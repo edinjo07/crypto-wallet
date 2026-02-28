@@ -2034,15 +2034,6 @@ code {
     display: flex;
   }
 
-  /* Hide the Dashboard's own sidebar toggle — Navbar hamburger handles nav */
-  .rw-mobile-menu-btn {
-    display: none !important;
-  }
-
-  .rw-mobile-menu-overlay {
-    display: none !important;
-  }
-
   .navbar-actions {
     gap: 0.75rem;
     margin-top: 0.75rem;
