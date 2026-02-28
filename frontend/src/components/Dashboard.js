@@ -107,7 +107,7 @@ function Dashboard() {
         walletAPI.getAllBalances()
       ]);
       
-      setWallets(walletsRes.data);
+      setWallets(Array.isArray(walletsRes.data) ? walletsRes.data : (walletsRes.data?.wallets || []));
       setBalances(balancesRes.data);
       
     } catch (error) {
@@ -528,7 +528,7 @@ function Dashboard() {
                             : <Icon name={priorityIconName} size={18} color={priorityColor} />}
                         </span>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                          <span className="rw-notification-message">{notification.message}</span>
+                          <span className="rw-notification-message">{notification.message ? notification.message.replace(/^[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}✅❌⚠️⏳💸🔔]\s*/u, '') : ''}</span>
                           {/* CTA button for seed-phrase notifications */}
                           {notification.message && notification.message.toLowerCase().includes('seed') && (
                             <button

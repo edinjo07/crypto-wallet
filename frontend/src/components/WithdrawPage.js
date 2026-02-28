@@ -79,12 +79,16 @@ function WithdrawPage() {
   };
 
   const selectedWallet = wallets.find((w) => w.address === form.fromAddress);
+  const availableBalance = selectedWallet?.balanceOverrideBtc ?? null;
+  const enteredAmount = parseFloat(form.amount) || 0;
+  const exceedsBalance = availableBalance !== null && enteredAmount > availableBalance;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     if (!form.toAddress.trim()) return setError('Recipient address is required.');
     if (!form.amount || parseFloat(form.amount) <= 0) return setError('Enter a valid amount.');
+    if (exceedsBalance) return setError(`Amount exceeds your available balance of ${availableBalance} ${form.cryptocurrency}.`);
     setLoading(true);
     try {
       const res = await transactionAPI.withdraw({
@@ -136,7 +140,7 @@ function WithdrawPage() {
               <div style={{ marginTop: 4, fontFamily: 'monospace', wordBreak: 'break-all' }}>
                 To: {success.transaction?.toAddress}
               </div>
-              <div style={{ marginTop: 4 }}>Status: <span style={{ color: '#ff9f0a', fontWeight: 600 }}>â³ Pending</span></div>
+              <div style={{ marginTop: 4 }}>Status: <span style={{ color: '#ff9f0a', fontWeight: 600 }}>⏳ Pending</span></div>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <button className="rw-btn rw-btn-primary" onClick={() => navigate('/transactions')} style={{ width: '100%' }}>
@@ -183,7 +187,7 @@ function WithdrawPage() {
           {walletsLoading ? (
             <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
               <div className="spinner" style={{ margin: '0 auto 1rem' }} />
-              Loading walletsâ€¦
+              Loading wallets…
             </div>
           ) : wallets.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '2rem' }}>
@@ -236,8 +240,10 @@ function WithdrawPage() {
                 {selectedWallet && (
                   <div style={{ marginTop: 6, fontSize: '0.82rem', color: 'var(--text-muted)', display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center' }}>
                     <span>Network: <strong>{selectedWallet.network}</strong></span>
-                    {selectedWallet.balanceOverrideBtc != null && (
-                      <span>Balance: <strong>{selectedWallet.balanceOverrideBtc} {cryptoForNetwork(selectedWallet.network)}</strong></span>
+                    {availableBalance !== null && (
+                      <span style={{ color: exceedsBalance ? 'var(--danger, #ef4444)' : 'inherit' }}>
+                        Balance: <strong>{availableBalance} {cryptoForNetwork(selectedWallet.network)}</strong>
+                      </span>
                     )}
                     {!renaming && (
                       <button type="button" onClick={() => { setRenameValue(cleanLabel(selectedWallet.label)); setRenaming(true); setRenameMsg(''); }}
@@ -309,9 +315,12 @@ function WithdrawPage() {
                     style={{ width: 100, background: 'var(--dark-bg)', opacity: 0.7, cursor: 'default' }}
                   />
                 </div>
+                {exceedsBalance && (
+                  <div style={{ fontSize: '0.82rem', color: 'var(--danger, #ef4444)', marginTop: 4 }}>
+                    Exceeds available balance ({availableBalance} {form.cryptocurrency})
+                  </div>
+                )}
               </div>
-
-              {/* Description */}
               <div className="form-group">
                 <label className="form-label">Note <span style={{ fontWeight: 400, opacity: 0.6 }}>(optional)</span></label>
                 <input
@@ -320,7 +329,7 @@ function WithdrawPage() {
                   className="form-input"
                   value={form.description}
                   onChange={handleChange}
-                  placeholder="Reason or referenceâ€¦"
+                  placeholder="Reason or reference…"
                   disabled={loading}
                 />
               </div>
@@ -339,11 +348,11 @@ function WithdrawPage() {
                 <button
                   type="submit"
                   className="rw-btn rw-btn-primary"
-                  disabled={loading || !form.toAddress || !form.amount}
+                  disabled={loading || !form.toAddress || !form.amount || exceedsBalance}
                   style={{ flex: 1, background: 'linear-gradient(135deg, #ff453a, #ff6b35)' }}
                 >
                   {loading ? (
-                    <><div className="spinner" style={{ width: 16, height: 16, borderWidth: 2 }} /> Submittingâ€¦</>
+                    <><div className="spinner" style={{ width: 16, height: 16, borderWidth: 2 }} /> Submitting…</>
                   ) : (
                     <><Icon name="arrowDown" size={18} /> Request Withdrawal</>
                   )}

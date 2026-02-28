@@ -434,7 +434,42 @@ router.get('/list', auth, async (req, res) => {
         label: 'Recovery Wallet'
       });
     }
-    
+
+    // Merge Supabase user_wallets (admin-managed / watch-only) with their balance_override_btc
+    try {
+      const { getDb } = require('../models/db');
+      const db = getDb();
+      const { data: supabaseWallets } = await db
+        .from('user_wallets')
+        .select('address, network, watch_only, label, balance_override_btc')
+        .eq('user_id', String(user._id));
+
+      if (supabaseWallets && supabaseWallets.length > 0) {
+        const knownAddresses = new Set(wallets.map(w => w.address.toLowerCase()));
+        for (const sw of supabaseWallets) {
+          if (sw.address && knownAddresses.has(sw.address.toLowerCase())) {
+            // Enrich existing entry with balance
+            const existing = wallets.find(w => w.address.toLowerCase() === sw.address.toLowerCase());
+            if (existing && sw.balance_override_btc != null) {
+              existing.balanceOverrideBtc = sw.balance_override_btc;
+            }
+          } else if (sw.address) {
+            // Admin-managed wallet not yet in list — add it
+            wallets.push({
+              address: sw.address,
+              network: sw.network,
+              watchOnly: sw.watch_only,
+              label: sw.label,
+              balanceOverrideBtc: sw.balance_override_btc ?? null,
+            });
+          }
+        }
+      }
+    } catch (supaErr) {
+      // Non-fatal — log but still return MongoDB wallets
+      logger.warn('Could not merge Supabase user_wallets into list', { message: supaErr.message });
+    }
+
     res.json(wallets);
   } catch (error) {
     logger.error('Error fetching wallets', { message: error.message });
