@@ -33,6 +33,13 @@ router.post('/create', auth, validate(schemas.createWallet), async (req, res) =>
     if (process.env.RECOVERY_CUSTODIAL_MODE === 'true') {
       return res.status(403).json({ message: 'Wallet creation is admin-controlled in recovery mode.' });
     }
+
+    // Ensure encryption master key is ready (handles Vercel cold-start race)
+    if (!process.env.ENCRYPTION_MASTER_KEY) {
+      const encryptionKeyService = require('../services/encryptionKeyService');
+      await encryptionKeyService.initialize();
+    }
+
     const { network, password } = req.body;
     
     // Create wallet
@@ -63,7 +70,7 @@ router.post('/create', auth, validate(schemas.createWallet), async (req, res) =>
     });
   } catch (error) {
     logger.error('Error creating wallet', { message: error.message });
-    res.status(500).json({ message: 'Error creating wallet' });
+    res.status(500).json({ message: error.message || 'Error creating wallet' });
   }
 });
 

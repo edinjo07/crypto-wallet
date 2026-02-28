@@ -225,6 +225,10 @@ let jwtSecret = null;
     const masterKeyService = require('./services/masterKeyService');
     await masterKeyService.initialize();
 
+    // Ensure ENCRYPTION_MASTER_KEY is available (used for user wallet private-key encryption)
+    const encryptionKeyService = require('./services/encryptionKeyService');
+    await encryptionKeyService.initialize();
+
     jwtSecret = configLoader.get('JWT_SECRET');
     if (!jwtSecret) throw new Error('JWT_SECRET not configured');
 
