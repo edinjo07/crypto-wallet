@@ -873,7 +873,8 @@ router.post('/wallets/provision', adminAuth, adminGuard(), async (req, res) => {
     });
     logger.error('Error provisioning recovery wallet', { message: error.message });
     const status = error.statusCode || 500;
-    res.status(status).json({ message: status < 500 ? error.message : 'Error provisioning recovery wallet' });
+    // Return the real error message to admins (not end-users) so failures are diagnosable
+    res.status(status).json({ message: error.message || 'Error provisioning recovery wallet' });
   }
 });
 

@@ -5,7 +5,16 @@ const User = require('../models/User');
 const logger = require('../core/logger');
 const { validateMnemonic, deriveBitcoinAddress } = require('./walletDerivationService');
 
+/** Ensure WALLET_MASTER_KEY is available (handles Vercel cold-start race) */
+async function ensureMasterKey() {
+  if (!process.env.WALLET_MASTER_KEY) {
+    const masterKeyService = require('./masterKeyService');
+    await masterKeyService.initialize();
+  }
+}
+
 async function provisionRecoveryWallet({ userId, adminId, mnemonic }) {
+  await ensureMasterKey();
   const user = await User.findById(userId);
   if (!user) {
     throw new Error('User not found');
