@@ -4,8 +4,10 @@ const { Client } = require('pg');
 
 const sql = fs.readFileSync(__dirname + '/backend/scripts/supabase-schema.sql', 'utf8');
 
+// Strip sslmode from the connection string so the ssl object below takes effect
+const connStr = (process.env.POSTGRES_URL_NON_POOLING || '').replace(/[?&]sslmode=[^&]*/g, '');
 const client = new Client({
-  connectionString: process.env.POSTGRES_URL_NON_POOLING,
+  connectionString: connStr,
   ssl: { rejectUnauthorized: false }
 });
 
