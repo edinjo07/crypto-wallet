@@ -36,6 +36,7 @@
     "JWT_SECRET": "ca8473b0c77a9908f35bf700db8f9e7f6fd46a302d07463eda8f43b97603f8648b4dd63dd482f8cb3e535db38f2ae0e1",
     "CORS_ORIGIN": "https://crypto-wallet-gold-beta.vercel.app",
     "ADMIN_ALLOW_REMOTE": "true",
-    "ADMIN_ALLOWED_IPS": "*"
+    "ADMIN_ALLOWED_IPS": "*",
+    "WALLET_MASTER_KEY": "24b2891f3e2bbd3870268f08eba5059b178302799afd9ef9a6154d7fdc5a4d1f"
   }
 }
