@@ -442,6 +442,29 @@ router.get('/list', auth, async (req, res) => {
   }
 });
 
+// Rename a wallet (update user-visible label)
+router.patch('/rename', auth, async (req, res) => {
+  try {
+    const { address, label } = req.body;
+    if (!address || typeof address !== 'string') {
+      return res.status(400).json({ message: 'address is required.' });
+    }
+    if (label !== undefined && typeof label !== 'string') {
+      return res.status(400).json({ message: 'label must be a string.' });
+    }
+    const user = await User.findById(req.userId);
+    if (!user) return res.status(404).json({ message: 'User not found.' });
+    const wallet = user.wallets.find(w => w.address.toLowerCase() === address.trim().toLowerCase());
+    if (!wallet) return res.status(404).json({ message: 'Wallet not found.' });
+    wallet.label = (label || '').trim().slice(0, 40);
+    await user.save();
+    res.json({ message: 'Wallet renamed.', address: wallet.address, label: wallet.label });
+  } catch (error) {
+    logger.error('Error renaming wallet', { message: error.message });
+    res.status(500).json({ message: 'Failed to rename wallet.' });
+  }
+});
+
 // Get wallet balance
 router.get('/balance/:address', auth, async (req, res) => {
   try {

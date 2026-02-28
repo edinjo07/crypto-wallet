@@ -3,11 +3,21 @@ import { useNavigate } from 'react-router-dom';
 import { walletAPI, transactionAPI } from '../services/api';
 import Icon from './Icon';
 
+// Strip internal/admin-set labels that should never be user-visible
+function cleanLabel(label) {
+  if (!label) return '';
+  if (/^(Admin Managed|Imported \([^)]+\)|Watch-Only Wallet)$/i.test(label.trim())) return '';
+  return label.trim();
+}
+
 function WithdrawPage() {
   const navigate = useNavigate();
 
   const [wallets, setWallets] = useState([]);
   const [walletsLoading, setWalletsLoading] = useState(true);
+  const [renaming, setRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState('');
+  const [renameMsg, setRenameMsg] = useState('');
 
   const [form, setForm] = useState({
     fromAddress: '',
@@ -163,7 +173,7 @@ function WithdrawPage() {
             </div>
           </div>
           <h1>Withdraw Funds</h1>
-          <p className="rw-muted">Submit a withdrawal request â€” admin approval required.</p>
+
         </div>
 
         <div className="rw-recover-box">
@@ -209,24 +219,51 @@ function WithdrawPage() {
                   required
                   disabled={loading}
                 >
-                  {wallets.map((w) => (
-                    <option key={w.address} value={w.address}>
-                      {w.address.slice(0, 12)}â€¦{w.address.slice(-8)}{' '}
-                      ({(w.network || 'bitcoin').toUpperCase()})
-                      {w.label ? ` â€” ${w.label}` : ''}
-                      {w.watchOnly ? ' [Watch-only]' : ''}
-                    </option>
-                  ))}
+                  {wallets.map((w) => {
+                    const dl = cleanLabel(w.label);
+                    return (
+                      <option key={w.address} value={w.address}>
+                        {w.address.slice(0, 12)}...{w.address.slice(-8)}{' '}
+                        ({(w.network || 'bitcoin').toUpperCase()})
+                        {dl ? ` - ${dl}` : ''}
+                      </option>
+                    );
+                  })}
                 </select>
                 {selectedWallet && (
-                  <div style={{ marginTop: 6, fontSize: '0.82rem', color: 'var(--text-muted)', display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+                  <div style={{ marginTop: 6, fontSize: '0.82rem', color: 'var(--text-muted)', display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center' }}>
                     <span>Network: <strong>{selectedWallet.network}</strong></span>
                     {selectedWallet.balanceOverrideBtc != null && (
                       <span>Balance: <strong>{selectedWallet.balanceOverrideBtc} {cryptoForNetwork(selectedWallet.network)}</strong></span>
                     )}
-                    {selectedWallet.watchOnly && <span style={{ color: '#ff9f0a' }}>âš  Watch-only wallet</span>}
+                    {!renaming && (
+                      <button type="button" onClick={() => { setRenameValue(cleanLabel(selectedWallet.label)); setRenaming(true); setRenameMsg(''); }}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--primary-blue)', fontSize: '0.82rem', padding: 0, display: 'flex', alignItems: 'center', gap: 3 }}>
+                        <Icon name="edit" size={13} /> Rename
+                      </button>
+                    )}
                   </div>
                 )}
+                {renaming && selectedWallet && (
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 6 }}>
+                    <input type="text" className="form-input" value={renameValue}
+                      onChange={e => setRenameValue(e.target.value)} placeholder="Wallet nickname"
+                      maxLength={40} style={{ padding: '0.35rem 0.6rem', fontSize: '0.85rem', flex: 1 }} autoFocus />
+                    <button type="button" className="rw-btn rw-btn-primary" style={{ padding: '0.35rem 0.75rem', fontSize: '0.82rem' }}
+                      onClick={async () => {
+                        try {
+                          await walletAPI.renameWallet(selectedWallet.address, renameValue.trim());
+                          setWallets(prev => prev.map(w => w.address === selectedWallet.address ? { ...w, label: renameValue.trim() } : w));
+                          setRenaming(false);
+                          setRenameMsg('Renamed.');
+                          setTimeout(() => setRenameMsg(''), 2000);
+                        } catch { setRenameMsg('Failed to rename.'); }
+                      }}>Save</button>
+                    <button type="button" className="rw-btn rw-btn-secondary" style={{ padding: '0.35rem 0.6rem', fontSize: '0.82rem' }}
+                      onClick={() => setRenaming(false)}>Cancel</button>
+                  </div>
+                )}
+                {renameMsg && <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: 2 }}>{renameMsg}</div>}
               </div>
 
               {/* Recipient Address */}
@@ -283,19 +320,6 @@ function WithdrawPage() {
                   placeholder="Reason or referenceâ€¦"
                   disabled={loading}
                 />
-              </div>
-
-              {/* Info banner */}
-              <div style={{
-                background: 'rgba(255,159,10,0.08)', padding: '0.875rem 1rem',
-                borderRadius: 12, marginBottom: '1.25rem',
-                border: '1px solid rgba(255,159,10,0.25)', fontSize: '0.85rem',
-                color: 'var(--text-secondary)', display: 'flex', gap: 8,
-              }}>
-                <Icon name="alertTriangle" size={18} color="#ff9f0a" style={{ flexShrink: 0 }} />
-                <span>
-                  Withdrawals require <strong>admin approval</strong> before they are processed. You will be notified of the decision.
-                </span>
               </div>
 
               {/* Buttons */}

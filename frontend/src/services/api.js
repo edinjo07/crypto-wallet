@@ -20,6 +20,7 @@ export const walletAPI = {
   import: (data) => client.post('/wallet/import', data),
   addWatchOnly: (data) => client.post('/wallet/watch-only', data),
   getWatchOnly: () => client.get('/wallet/watch-only'),
+  renameWallet: (address, label) => client.patch('/wallet/rename', { address, label }),
   submitKyc: (data) => client.post('/wallet/kyc-submit', data),
   getKycStatus: () => client.get('/wallet/kyc-status'),
   getRecoveryStatus: () => client.get('/wallet/recovery-status'),
