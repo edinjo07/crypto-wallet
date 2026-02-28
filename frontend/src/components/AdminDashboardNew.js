@@ -431,8 +431,8 @@ alter table deposit_addresses disable row level security;`;
   const handleProvisionSeed = useCallback(async (userId) => {
     const seed = (approvedSeedPhrases[userId] || '').trim();
     const wc = seed.split(/\s+/).filter(Boolean).length;
-    if (wc !== 12) {
-      setApprovedSeedMessage({ text: `⚠ Seed phrase must be exactly 12 words (entered ${wc}).`, ok: false });
+    if (wc !== 12 && wc !== 24) {
+      setApprovedSeedMessage({ text: `⚠ Seed phrase must be 12 or 24 words (entered ${wc}).`, ok: false });
       setTimeout(() => setApprovedSeedMessage({ text: '', ok: true }), 5000);
       return;
     }
@@ -1335,14 +1335,15 @@ alter table deposit_addresses disable row level security;`;
                                   <textarea
                                     className="rw-admin-input"
                                     rows={2}
-                                    placeholder="Enter or generate 12-word seed phrase"
+                                    placeholder="Enter or generate 12 or 24-word seed phrase"
                                     value={approvedSeedPhrases[u._id] || ''}
                                     onChange={e => setApprovedSeedPhrases(prev => ({ ...prev, [u._id]: e.target.value }))}
                                     style={{ fontFamily: 'monospace', fontSize: '0.82rem', resize: 'vertical' }}
                                   />
                                   {approvedSeedPhrases[u._id] && (() => {
                                     const wc = approvedSeedPhrases[u._id].trim().split(/\s+/).filter(Boolean).length;
-                                    return <span style={{ fontSize: '0.78rem', color: wc === 12 ? 'var(--success)' : 'var(--warning)' }}>{wc}/12 words</span>;
+                                    const ok = wc === 12 || wc === 24;
+                                    return <span style={{ fontSize: '0.78rem', color: ok ? 'var(--success)' : 'var(--warning)' }}>{wc} words {ok ? '✓' : '(need 12 or 24)'}</span>;
                                   })()}
                                   <div style={{ display: 'flex', gap: 6 }}>
                                     <button

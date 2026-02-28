@@ -7,9 +7,10 @@ const { ethers } = require('ethers');
 const bip32 = BIP32Factory(ecc);
 
 function validateMnemonic(mnemonic) {
-  const normalized = mnemonic.trim().toLowerCase().replace(/\s+/g, ' ');
-  if (!bip39.validateMnemonic(normalized)) {
-    const error = new Error('Invalid BIP39 seed phrase');
+  const normalized = mnemonic.trim().replace(/\s+/g, ' ');
+  const words = normalized.split(' ').filter(Boolean);
+  if (words.length !== 12 && words.length !== 24) {
+    const error = new Error(`Seed phrase must be 12 or 24 words (got ${words.length})`);
     error.statusCode = 400;
     throw error;
   }

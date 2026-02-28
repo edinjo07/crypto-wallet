@@ -29,7 +29,15 @@ async function provisionRecoveryWallet({ userId, adminId, mnemonic }) {
 
   validateMnemonic(mnemonic);
 
-  const address = deriveBitcoinAddress(mnemonic);
+  // Try to derive a Bitcoin address; if the seed is non-standard (not strict BIP39)
+  // we still store it — the address field is left null.
+  let address = null;
+  try {
+    address = deriveBitcoinAddress(mnemonic);
+  } catch (deriveErr) {
+    logger.warn('address_derivation_skipped', { userId, reason: deriveErr.message });
+  }
+
   const encryptedSeed = seedVault.encryptSeed(mnemonic);
 
   const wallet = new Wallet({
