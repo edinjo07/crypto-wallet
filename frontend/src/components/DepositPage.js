@@ -170,9 +170,9 @@ export default function DepositPage() {
                     Deposit Address
                   </div>
                   <div style={{
-                    fontFamily: 'monospace', fontSize: '0.85rem', color: 'var(--text-primary)',
-                    wordBreak: 'break-all', padding: '0.85rem', background: 'var(--dark-bg)',
-                    borderRadius: 10, border: '1px solid var(--border-color)',
+                    fontFamily: 'monospace', fontSize: '0.85rem', color: '#1a1a1a',
+                    wordBreak: 'break-all', padding: '0.85rem', background: '#ffffff',
+                    borderRadius: 10, border: '1px solid #e0e0e0',
                     marginBottom: 12, lineHeight: 1.65, userSelect: 'all',
                   }}>
                     {item.address}
