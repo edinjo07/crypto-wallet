@@ -53,11 +53,12 @@ async function initialize() {
     );
   } catch (persistErr) {
     logger.error('master_key_persist_failed', { message: persistErr.message });
-    // Still inject into memory so this boot works; next boot will regenerate
-    // (existing encrypted seeds won't be decryptable — warn loudly)
-    logger.warn('master_key_not_persisted', {
-      warning: 'Seeds encrypted this session cannot be decrypted on next cold start unless WALLET_MASTER_KEY env var is set'
-    });
+    // Refusing to use an ephemeral key — seeds encrypted with it would become
+    // permanently unrecoverable after the next cold start.
+    throw new Error(
+      'WALLET_MASTER_KEY is not set and could not be persisted to system_config. ' +
+      'Set WALLET_MASTER_KEY as an environment variable to fix this.'
+    );
   }
 
   process.env.WALLET_MASTER_KEY = newKey;
