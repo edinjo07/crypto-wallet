@@ -67,9 +67,18 @@ const importWalletSchema = z.object({
   password: passwordSchema,
 });
 
-// Watch-only wallet schema
+// Watch-only wallet schema — accepts Ethereum (0x...) and Bitcoin (legacy, P2SH, bech32) addresses
 const watchOnlyWalletSchema = z.object({
-  address: ethereumAddressSchema,
+  address: z
+    .string()
+    .min(1, 'Address is required')
+    .refine(
+      (v) =>
+        /^0x[a-fA-F0-9]{40}$/.test(v) ||
+        /^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$/.test(v) ||
+        /^bc1[a-z0-9]{39,59}$/.test(v),
+      { message: 'Invalid address format (must be a valid Ethereum or Bitcoin address)' }
+    ),
   network: networkSchema,
   label: z
     .string()

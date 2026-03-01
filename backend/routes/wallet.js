@@ -690,42 +690,39 @@ router.post('/import', auth, validate(schemas.importWallet), async (req, res) =>
 router.post('/watch-only', auth, validate(schemas.watchOnlyWallet), async (req, res) => {
   try {
     const { address, network, label } = req.body;
-    
-    if (!address) {
-      return res.status(400).json({ message: 'Address is required' });
-    }
+    const resolvedNetwork = network || 'ethereum';
+    const resolvedLabel = (label && label.trim()) || 'Watch-Only Wallet';
 
-    if (!requireString(address, 'Address', res)) {
-      return;
-    }
-    
-    // Validate address format
-    if (!/^0x[a-fA-F0-9]{40}$/.test(address)) {
-      return res.status(400).json({ message: 'Invalid wallet address format' });
-    }
-    
-    const user = await User.findById(req.userId);
-    
-    // Check if wallet already exists
-    const exists = user.wallets.find(w => w.address.toLowerCase() === address.toLowerCase());
-    if (exists) {
+    const { getDb } = require('../models/db');
+    const db = getDb();
+
+    // Check if wallet already exists for this user
+    const { data: existing } = await db
+      .from('user_wallets')
+      .select('id')
+      .eq('user_id', req.userId)
+      .ilike('address', address)
+      .maybeSingle();
+
+    if (existing) {
       return res.status(400).json({ message: 'Wallet already exists' });
     }
-    
-    // Add watch-only wallet (no private key)
-    user.wallets.push({
+
+    const { error: insertError } = await db.from('user_wallets').insert({
+      user_id: req.userId,
       address,
-      network: network || 'ethereum',
-      watchOnly: true,
-      label: label || 'Watch-Only Wallet'
+      network: resolvedNetwork,
+      watch_only: true,
+      label: resolvedLabel
     });
-    await user.save();
-    
+
+    if (insertError) throw insertError;
+
     res.json({
       address,
-      network: network || 'ethereum',
+      network: resolvedNetwork,
       watchOnly: true,
-      label: label || 'Watch-Only Wallet'
+      label: resolvedLabel
     });
   } catch (error) {
     logger.error('Error adding watch-only wallet', { message: error.message });
@@ -736,12 +733,22 @@ router.post('/watch-only', auth, validate(schemas.watchOnlyWallet), async (req, 
 // Get watch-only wallets
 router.get('/watch-only', auth, async (req, res) => {
   try {
-    const user = await User.findById(req.userId);
-    const watchOnlyWallets = user.wallets
-      .filter(w => w.watchOnly)
-      .map(toWalletSummary);
-    
-    res.json(watchOnlyWallets);
+    const { getDb } = require('../models/db');
+    const db = getDb();
+    const { data, error } = await db
+      .from('user_wallets')
+      .select('address, network, watch_only, label')
+      .eq('user_id', req.userId)
+      .eq('watch_only', true);
+
+    if (error) throw error;
+
+    res.json((data || []).map(w => ({
+      address: w.address,
+      network: w.network,
+      watchOnly: w.watch_only,
+      label: w.label
+    })));
   } catch (error) {
     logger.error('Error fetching watch-only wallets', { message: error.message });
     res.status(500).json({ message: 'Error fetching watch-only wallets' });
