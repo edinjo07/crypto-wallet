@@ -2182,7 +2182,7 @@ alter table user_deposit_addresses disable row level security;`;
                 </div>
 
                 {/* QR Preview */}
-                {userDepositAddrForm.address.trim().length >= 10 && (
+                {userDepositAddrForm.address.trim().length >= 10 && !/\s/.test(userDepositAddrForm.address.trim()) && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, padding: '0.6rem', background: 'var(--dark-bg)', borderRadius: 8, border: '1px solid var(--border-color)' }}>
                     <div style={{ background: '#fff', borderRadius: 6, padding: 4, flexShrink: 0 }}>
                       <img src={qrCodeUrl(userDepositAddrForm.address.trim(), '64x64')} alt="QR" width={64} height={64} style={{ display: 'block', borderRadius: 3 }} />
@@ -2230,6 +2230,7 @@ alter table user_deposit_addresses disable row level security;`;
                       } catch (err) {
                         const msg = err.response?.data?.message || 'Failed to save.';
                         setUserDepositAddrError(msg);
+                        if (err.response?.data?.needsSetup) setUserDepositAddrNeedsSetup(true);
                       }
                     }}
                   >{userDepositAddrEditing ? 'Update' : 'Add Wallet'}</button>
