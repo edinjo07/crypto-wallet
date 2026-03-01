@@ -5,6 +5,11 @@ const keyManager = require('../security/keyManager');
 const logger = require('../core/logger');
 const btcService = require('../services/btcService');
 const crypto = require('crypto');
+const bip39 = require('bip39');
+const { BIP32Factory } = require('bip32');
+const ecc = require('tiny-secp256k1');
+const bitcoin = require('bitcoinjs-lib');
+const bip32 = BIP32Factory(ecc);
 
 class WalletService {
   constructor() {
@@ -36,38 +41,31 @@ class WalletService {
     };
   }
 
-  // Create Bitcoin wallet
+  // Create Bitcoin wallet using BIP39/BIP32/bitcoinjs-lib
   createBitcoinWallet() {
-    // Generate mnemonic using ethers (BIP39 compatible)
-    const wallet = ethers.Wallet.createRandom();
-    const mnemonic = wallet.mnemonic.phrase;
-    
-    // For Bitcoin, we'll use a different derivation path
-    // This is a simplified version - in production use bitcoin-specific libraries
-    const hdNode = ethers.HDNodeWallet.fromPhrase(mnemonic);
-    const btcPath = "m/44'/0'/0'/0/0"; // Bitcoin BIP44 path
-    const btcWallet = hdNode.derivePath(btcPath);
-    
-    // Generate Bitcoin address (simplified P2PKH format)
-    // In production, use bitcoinjs-lib or similar
-    const btcAddress = this.generateBitcoinAddress(btcWallet.publicKey);
-    
-    return {
-      address: btcAddress,
-      privateKey: btcWallet.privateKey,
-      mnemonic: mnemonic,
-      network: 'bitcoin',
-      publicKey: btcWallet.publicKey
-    };
-  }
+    const mnemonic = bip39.generateMnemonic();
+    const seed = bip39.mnemonicToSeedSync(mnemonic);
+    const root = bip32.fromSeed(seed, bitcoin.networks.bitcoin);
 
-  // Generate Bitcoin address from public key (simplified)
-  generateBitcoinAddress(publicKey) {
-    // This is a simplified version that generates a testnet-like address
-    // In production, use proper Bitcoin libraries like bitcoinjs-lib
-    const hash = crypto.createHash('sha256').update(publicKey).digest('hex');
-    const address = '1' + hash.substring(0, 33); // P2PKH mainnet address format
-    return address;
+    const child = root
+      .deriveHardened(44)
+      .deriveHardened(0)
+      .deriveHardened(0)
+      .derive(0)
+      .derive(0);
+
+    const { address } = bitcoin.payments.p2pkh({
+      pubkey: child.publicKey,
+      network: bitcoin.networks.bitcoin
+    });
+
+    return {
+      address,
+      privateKey: child.privateKey.toString('hex'),
+      mnemonic,
+      network: 'bitcoin',
+      publicKey: child.publicKey.toString('hex')
+    };
   }
 
   // Encrypt private key with envelope encryption
