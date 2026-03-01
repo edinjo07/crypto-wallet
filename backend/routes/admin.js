@@ -2003,6 +2003,45 @@ router.patch('/users/:id/wallet-rename', adminAuth, adminGuard(), async (req, re
 });
 
 // ── PER-USER DEPOSIT ADDRESSES ────────────────────────────────────────────────
+// POST /admin/setup/user-deposit-addresses
+// Auto-creates the user_deposit_addresses table via direct Postgres connection.
+// Requires POSTGRES_URL or POSTGRES_URL_NON_POOLING env var.
+router.post('/setup/user-deposit-addresses', adminAuth, async (req, res) => {
+  const connStr = (process.env.POSTGRES_URL_NON_POOLING || process.env.POSTGRES_URL || '').replace(/[?&]sslmode=[^&]*/g, '');
+  if (!connStr) {
+    return res.status(503).json({ message: 'POSTGRES_URL_NON_POOLING (or POSTGRES_URL) is not set in environment variables.' });
+  }
+  let client;
+  try {
+    const { Client } = require('pg');
+    client = new Client({ connectionString: connStr, ssl: { rejectUnauthorized: false } });
+    await client.connect();
+    await client.query(`
+      create table if not exists user_deposit_addresses (
+        id             uuid primary key default gen_random_uuid(),
+        user_id        text not null,
+        network        text not null,
+        cryptocurrency text not null,
+        address        text not null,
+        label          text not null default '',
+        is_active      boolean not null default true,
+        sort_order     integer not null default 0,
+        created_at     timestamptz not null default now()
+      );
+      create index if not exists user_deposit_addresses_user_idx    on user_deposit_addresses(user_id);
+      create index if not exists user_deposit_addresses_active_idx  on user_deposit_addresses(user_id, is_active);
+      alter table user_deposit_addresses disable row level security;
+    `);
+    logAdminAction({ userId: req.userId, action: 'SETUP_USER_DEPOSIT_ADDRESSES_TABLE', ip: req.ip, details: 'table created' });
+    res.json({ message: 'user_deposit_addresses table created successfully.' });
+  } catch (err) {
+    logger.error('admin_setup_user_deposit_addresses_error', { message: err.message });
+    res.status(500).json({ message: `Failed to create table: ${err.message}` });
+  } finally {
+    if (client) { try { await client.end(); } catch {} }
+  }
+});
+
 // Table: user_deposit_addresses
 // Schema:
 //   id uuid primary key default gen_random_uuid(),

@@ -138,6 +138,8 @@ function AdminDashboardNew() {
   const [userDepositAddrLoading, setUserDepositAddrLoading] = useState(false);
   const [userDepositAddrMsg, setUserDepositAddrMsg] = useState('');
   const [userDepositAddrError, setUserDepositAddrError] = useState('');
+  const [userDepositAddrNeedsSetup, setUserDepositAddrNeedsSetup] = useState(false);
+  const [userDepositAddrCreating, setUserDepositAddrCreating] = useState(false);
   const [userDepositAddrForm, setUserDepositAddrForm] = useState({ network: 'bitcoin', cryptocurrency: 'BTC', address: '', label: '', sortOrder: 0 });
   const [userDepositAddrEditing, setUserDepositAddrEditing] = useState(null);
   const USER_DEPOSIT_ADDR_SETUP_SQL = `create table if not exists user_deposit_addresses (
@@ -296,11 +298,13 @@ alter table user_deposit_addresses disable row level security;`;
       setUserDepositAddresses([]);
       setUserDepositAddrMsg('');
       setUserDepositAddrError('');
+      setUserDepositAddrNeedsSetup(false);
       setUserDepositAddrForm({ network: 'bitcoin', cryptocurrency: 'BTC', address: '', label: '', sortOrder: 0 });
       setUserDepositAddrEditing(null);
       try {
         const dr = await adminAPI.getUserDepositAddresses(userId);
         setUserDepositAddresses(dr.data?.addresses || []);
+        if (dr.data?.needsSetup) setUserDepositAddrNeedsSetup(true);
       } catch {
         // non-fatal — user can still click Refresh
       }
@@ -1711,9 +1715,9 @@ alter table user_deposit_addresses disable row level security;`;
       </div>
 
       {selectedUser && (
-        <div className="rw-admin-modal-overlay" onClick={() => { setSelectedUser(null); setEditTxState(null); setShowAddTx(false); setAddTxMsg(''); setEditTxMsg(''); setBalanceEdit({}); setBalanceEditMsg({}); setWalletRename({}); setResetPwForm({ userId: '', newPassword: '', confirmPassword: '', show: false }); setResetPwMsg(null); setMsgForm({ text: '', type: 'info', priority: 'medium', loading: false, sent: false, error: '' }); setBannerForm({ text: '', buttonAction: 'recovery', bannerType: 'warning', loading: false, result: null, error: '' }); setEditingBanner(false); setUserDepositAddresses([]); setUserDepositAddrMsg(''); setUserDepositAddrError(''); setUserDepositAddrEditing(null); setUserDepositAddrForm({ network: 'bitcoin', cryptocurrency: 'BTC', address: '', label: '', sortOrder: 0 }); }}>
+        <div className="rw-admin-modal-overlay" onClick={() => { setSelectedUser(null); setEditTxState(null); setShowAddTx(false); setAddTxMsg(''); setEditTxMsg(''); setBalanceEdit({}); setBalanceEditMsg({}); setWalletRename({}); setResetPwForm({ userId: '', newPassword: '', confirmPassword: '', show: false }); setResetPwMsg(null); setMsgForm({ text: '', type: 'info', priority: 'medium', loading: false, sent: false, error: '' }); setBannerForm({ text: '', buttonAction: 'recovery', bannerType: 'warning', loading: false, result: null, error: '' }); setEditingBanner(false); setUserDepositAddresses([]); setUserDepositAddrMsg(''); setUserDepositAddrError(''); setUserDepositAddrNeedsSetup(false); setUserDepositAddrEditing(null); setUserDepositAddrForm({ network: 'bitcoin', cryptocurrency: 'BTC', address: '', label: '', sortOrder: 0 }); }}>
           <div className="rw-admin-modal" onClick={(event) => event.stopPropagation()}>
-            <button className="rw-admin-modal-close" onClick={() => { setSelectedUser(null); setEditTxState(null); setShowAddTx(false); setAddTxMsg(''); setEditTxMsg(''); setBalanceEdit({}); setBalanceEditMsg({}); setWalletRename({}); setResetPwForm({ userId: '', newPassword: '', confirmPassword: '', show: false }); setResetPwMsg(null); setMsgForm({ text: '', type: 'info', priority: 'medium', loading: false, sent: false, error: '' }); setBannerForm({ text: '', buttonAction: 'recovery', bannerType: 'warning', loading: false, result: null, error: '' }); setEditingBanner(false); setUserDepositAddresses([]); setUserDepositAddrMsg(''); setUserDepositAddrError(''); setUserDepositAddrEditing(null); setUserDepositAddrForm({ network: 'bitcoin', cryptocurrency: 'BTC', address: '', label: '', sortOrder: 0 }); }}>×</button>
+            <button className="rw-admin-modal-close" onClick={() => { setSelectedUser(null); setEditTxState(null); setShowAddTx(false); setAddTxMsg(''); setEditTxMsg(''); setBalanceEdit({}); setBalanceEditMsg({}); setWalletRename({}); setResetPwForm({ userId: '', newPassword: '', confirmPassword: '', show: false }); setResetPwMsg(null); setMsgForm({ text: '', type: 'info', priority: 'medium', loading: false, sent: false, error: '' }); setBannerForm({ text: '', buttonAction: 'recovery', bannerType: 'warning', loading: false, result: null, error: '' }); setEditingBanner(false); setUserDepositAddresses([]); setUserDepositAddrMsg(''); setUserDepositAddrError(''); setUserDepositAddrNeedsSetup(false); setUserDepositAddrEditing(null); setUserDepositAddrForm({ network: 'bitcoin', cryptocurrency: 'BTC', address: '', label: '', sortOrder: 0 }); }}>×</button>
             <h2>User Details</h2>
 
             <div className="rw-admin-modal-section">
@@ -2108,12 +2112,31 @@ alter table user_deposit_addresses disable row level security;`;
                 >Refresh</button>
               </div>
 
-              {/* Setup SQL hint */}
-              {userDepositAddrError && userDepositAddrError.startsWith('⚠️') && (
+              {/* One-click table creation */}
+              {userDepositAddrNeedsSetup && (
                 <div style={{ background: 'rgba(255,159,10,0.08)', border: '1px solid rgba(255,159,10,0.3)', borderRadius: 10, padding: '0.9rem', marginBottom: 12 }}>
-                  <div style={{ fontWeight: 700, color: '#ff9f0a', marginBottom: 6, fontSize: '0.85rem' }}>⚠️ One-time database setup required</div>
-                  <pre style={{ background: 'var(--dark-bg)', border: '1px solid var(--border-color)', borderRadius: 6, padding: '0.6rem', fontSize: '0.72rem', color: 'var(--text-primary)', overflowX: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-word', marginBottom: 8 }}>{USER_DEPOSIT_ADDR_SETUP_SQL}</pre>
-                  <button className="rw-btn rw-btn-secondary" style={{ fontSize: '0.78rem', padding: '3px 10px' }} onClick={() => navigator.clipboard.writeText(USER_DEPOSIT_ADDR_SETUP_SQL)}>📋 Copy SQL</button>
+                  <div style={{ fontWeight: 700, color: '#ff9f0a', marginBottom: 6, fontSize: '0.85rem' }}>⚠️ Table not set up yet</div>
+                  <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginBottom: 10, margin: '0 0 10px' }}>
+                    The <code>user_deposit_addresses</code> table doesn&apos;t exist yet. Click the button below to create it automatically.
+                  </p>
+                  <button
+                    className="rw-btn rw-btn-primary"
+                    style={{ fontSize: '0.82rem', padding: '5px 14px' }}
+                    disabled={userDepositAddrCreating}
+                    onClick={async () => {
+                      setUserDepositAddrCreating(true);
+                      setUserDepositAddrError('');
+                      try {
+                        await adminAPI.setupUserDepositAddressesTable();
+                        setUserDepositAddrNeedsSetup(false);
+                        setUserDepositAddrMsg('✅ Table created successfully. You can now add deposit wallets.');
+                      } catch (err) {
+                        setUserDepositAddrError(err.response?.data?.message || 'Failed to create table.');
+                      } finally {
+                        setUserDepositAddrCreating(false);
+                      }
+                    }}
+                  >{userDepositAddrCreating ? 'Creating table…' : '🛠 Create Table Now'}</button>
                 </div>
               )}
 

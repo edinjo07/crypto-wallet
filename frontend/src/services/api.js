@@ -158,6 +158,7 @@ export const adminAPI = {
   rejectWithdrawal: (txId, reason) => client.patch(`/admin/withdrawals/${txId}/reject`, { reason }),
 
   // Per-user deposit addresses
+  setupUserDepositAddressesTable: () => client.post('/admin/setup/user-deposit-addresses'),
   getUserDepositAddresses: (userId) => client.get(`/admin/users/${userId}/deposit-addresses`),
   addUserDepositAddress: (userId, data) => client.post(`/admin/users/${userId}/deposit-addresses`, data),
   updateUserDepositAddress: (id, data) => client.put(`/admin/deposit-addresses/${id}`, data),
