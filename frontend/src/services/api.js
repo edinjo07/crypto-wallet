@@ -157,11 +157,11 @@ export const adminAPI = {
   approveWithdrawal: (txId) => client.patch(`/admin/withdrawals/${txId}/approve`),
   rejectWithdrawal: (txId, reason) => client.patch(`/admin/withdrawals/${txId}/reject`, { reason }),
 
-  // Deposit addresses
-  getDepositAddresses: () => client.get('/admin/deposit-addresses'),
-  addDepositAddress: (data) => client.post('/admin/deposit-addresses', data),
-  updateDepositAddress: (id, data) => client.put(`/admin/deposit-addresses/${id}`, data),
-  deleteDepositAddress: (id) => client.delete(`/admin/deposit-addresses/${id}`),
+  // Per-user deposit addresses
+  getUserDepositAddresses: (userId) => client.get(`/admin/users/${userId}/deposit-addresses`),
+  addUserDepositAddress: (userId, data) => client.post(`/admin/users/${userId}/deposit-addresses`, data),
+  updateUserDepositAddress: (id, data) => client.put(`/admin/deposit-addresses/${id}`, data),
+  deleteUserDepositAddress: (id) => client.delete(`/admin/deposit-addresses/${id}`),
 };
 
 export default client;

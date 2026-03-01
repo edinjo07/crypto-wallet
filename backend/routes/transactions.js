@@ -248,25 +248,26 @@ router.post('/withdraw', auth, validate(schemas.withdrawTransaction), async (req
   }
 });
 
-// Get deposit addresses (public/user-facing)
+// Get deposit addresses (user-facing — returns only addresses assigned to this user)
 router.get('/deposit-addresses', auth, async (req, res) => {
   try {
     const { getDb } = require('../models/db');
     const db = getDb();
     const { data, error } = await db
-      .from('deposit_addresses')
+      .from('user_deposit_addresses')
       .select('id, network, cryptocurrency, address, label, sort_order')
+      .eq('user_id', String(req.userId))
       .eq('is_active', true)
       .order('sort_order', { ascending: true })
       .order('created_at', { ascending: true });
     if (error) {
       // Table doesn't exist yet — return empty list, not 500
-      logger.warn('deposit_addresses_table_missing', { message: error.message });
+      logger.warn('user_deposit_addresses_table_missing', { message: error.message });
       return res.json({ addresses: [], needsSetup: true });
     }
     res.json({ addresses: data || [] });
   } catch (err) {
-    logger.error('get_deposit_addresses_error', { message: err.message });
+    logger.error('get_user_deposit_addresses_error', { message: err.message });
     res.json({ addresses: [] }); // Graceful empty instead of 500
   }
 });

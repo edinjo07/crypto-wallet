@@ -133,17 +133,16 @@ function AdminDashboardNew() {
   const [withdrawalsLoading, setWithdrawalsLoading] = useState(false);
   const [withdrawalRejectReasons, setWithdrawalRejectReasons] = useState({});
   const [withdrawalMsg, setWithdrawalMsg] = useState({});
-  // Deposit addresses
-  const [depositAddresses, setDepositAddresses] = useState([]);
-  const [depositAddrLoading, setDepositAddrLoading] = useState(false);
-  const [depositAddrMsg, setDepositAddrMsg] = useState('');
-  const [depositAddrError, setDepositAddrError] = useState('');
-  const [depositAddrForm, setDepositAddrForm] = useState({ network: 'bitcoin', cryptocurrency: 'BTC', address: '', label: '', sortOrder: 0 });
-  const [depositAddrEditing, setDepositAddrEditing] = useState(null); // id being edited
-  const [depositAddrNeedsSetup, setDepositAddrNeedsSetup] = useState(false);
-
-  const DEPOSIT_ADDR_SETUP_SQL = `create table if not exists deposit_addresses (
+  // Per-user deposit addresses (managed via user detail modal)
+  const [userDepositAddresses, setUserDepositAddresses] = useState([]);
+  const [userDepositAddrLoading, setUserDepositAddrLoading] = useState(false);
+  const [userDepositAddrMsg, setUserDepositAddrMsg] = useState('');
+  const [userDepositAddrError, setUserDepositAddrError] = useState('');
+  const [userDepositAddrForm, setUserDepositAddrForm] = useState({ network: 'bitcoin', cryptocurrency: 'BTC', address: '', label: '', sortOrder: 0 });
+  const [userDepositAddrEditing, setUserDepositAddrEditing] = useState(null);
+  const USER_DEPOSIT_ADDR_SETUP_SQL = `create table if not exists user_deposit_addresses (
   id             uuid primary key default gen_random_uuid(),
+  user_id        text not null,
   network        text not null,
   cryptocurrency text not null,
   address        text not null,
@@ -152,7 +151,7 @@ function AdminDashboardNew() {
   sort_order     integer not null default 0,
   created_at     timestamptz not null default now()
 );
-alter table deposit_addresses disable row level security;`;
+alter table user_deposit_addresses disable row level security;`;
 
   // Wallet import
   const [walletImport, setWalletImport] = useState({ userId: '', address: '', chain: 'bitcoin', manualBalance: '', result: null, loading: false, error: '' });
@@ -293,6 +292,18 @@ alter table deposit_addresses disable row level security;`;
       setMsgForm({ text: '', type: 'info', priority: 'medium', loading: false, sent: false, error: '' });
       setBannerForm({ text: '', buttonAction: 'recovery', bannerType: 'warning', loading: false, result: null, error: '' });
       setEditingBanner(false);
+      // Auto-load per-user deposit wallets
+      setUserDepositAddresses([]);
+      setUserDepositAddrMsg('');
+      setUserDepositAddrError('');
+      setUserDepositAddrForm({ network: 'bitcoin', cryptocurrency: 'BTC', address: '', label: '', sortOrder: 0 });
+      setUserDepositAddrEditing(null);
+      try {
+        const dr = await adminAPI.getUserDepositAddresses(userId);
+        setUserDepositAddresses(dr.data?.addresses || []);
+      } catch {
+        // non-fatal — user can still click Refresh
+      }
     } catch (error) {
       setActionMessage('Failed to load user details.');
     }
@@ -733,7 +744,7 @@ alter table deposit_addresses disable row level security;`;
               { id: 'admin-wallets',            label: 'Wallet Provisioning' },
               { id: 'admin-recovery',           label: 'Recovery Attempts' },
               { id: 'admin-withdrawals',          label: '💸 Withdrawals' },
-              { id: 'admin-deposit-addresses',     label: '📥 Deposit Addresses' },
+
               { id: 'admin-market',             label: 'Live Prices' },
               { id: 'admin-market-analytics',   label: 'Market Analytics' },
               { id: 'admin-audit',              label: 'Audit Logs' },
@@ -1583,248 +1594,6 @@ alter table deposit_addresses disable row level security;`;
             </>
           )}
 
-          {/* ── DEPOSIT ADDRESSES ─────────────────────────────────────── */}
-          {activeSection === 'admin-deposit-addresses' && (
-            <>
-              <section className="rw-admin-card rw-admin-section" id="admin-deposit-addresses">
-                <div className="rw-admin-section-header">
-                  <h3>📥 Deposit Addresses</h3>
-                  <button className="rw-btn rw-btn-secondary" onClick={async () => {
-                    setDepositAddrLoading(true);
-                    setDepositAddrError('');
-                    try {
-                      const r = await adminAPI.getDepositAddresses();
-                      setDepositAddresses(r.data?.addresses || []);
-                      setDepositAddrNeedsSetup(!!r.data?.needsSetup);
-                    } catch {
-                      setDepositAddrError('Failed to load deposit addresses.');
-                    } finally {
-                      setDepositAddrLoading(false);
-                    }
-                  }}>Refresh</button>
-                </div>
-
-                {/* Setup required banner */}
-                {depositAddrNeedsSetup && (
-                  <div style={{ background: 'rgba(255,159,10,0.08)', border: '1px solid rgba(255,159,10,0.3)', borderRadius: 12, padding: '1.25rem', marginBottom: '1.5rem' }}>
-                    <div style={{ fontWeight: 700, color: '#ff9f0a', marginBottom: 8 }}>⚠️ One-time database setup required</div>
-                    <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: 10 }}>
-                      The <code>deposit_addresses</code> table doesn&apos;t exist yet in your Supabase database.
-                      Go to <strong>Supabase Dashboard → SQL Editor</strong>, paste the SQL below, and click Run. Then click Refresh above.
-                    </p>
-                    <pre style={{ background: 'var(--dark-bg)', border: '1px solid var(--border-color)', borderRadius: 8, padding: '0.85rem', fontSize: '0.78rem', color: 'var(--text-primary)', overflowX: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-word', marginBottom: 10 }}>{DEPOSIT_ADDR_SETUP_SQL}</pre>
-                    <button
-                      className="rw-btn rw-btn-secondary"
-                      onClick={() => { navigator.clipboard.writeText(DEPOSIT_ADDR_SETUP_SQL); }}
-                      style={{ fontSize: '0.82rem' }}
-                    >📋 Copy SQL</button>
-                  </div>
-                )}
-
-                {/* Add / Edit form */}
-                <div style={{ background: 'rgba(96,181,255,0.05)', border: '1px solid rgba(96,181,255,0.15)', borderRadius: 12, padding: '1.25rem', marginBottom: '1.5rem' }}>
-                  <div style={{ fontWeight: 700, marginBottom: '1rem', fontSize: '0.95rem', color: 'var(--text-primary)' }}>
-                    {depositAddrEditing ? '✏️ Edit Deposit Address' : '➕ Add Deposit Address'}
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
-                    <div>
-                      <label className="rw-admin-label">Network</label>
-                      <select
-                        className="rw-admin-input"
-                        value={depositAddrForm.network}
-                        onChange={(e) => {
-                          const netMap = { bitcoin: 'BTC', ethereum: 'ETH', litecoin: 'LTC', dogecoin: 'DOGE', bsc: 'BNB', polygon: 'MATIC', tron: 'TRX', solana: 'SOL' };
-                          setDepositAddrForm(f => ({ ...f, network: e.target.value, cryptocurrency: netMap[e.target.value] || f.cryptocurrency }));
-                        }}
-                      >
-                        {['bitcoin','ethereum','litecoin','dogecoin','bsc','polygon','tron','solana'].map(n => (
-                          <option key={n} value={n}>{n.charAt(0).toUpperCase() + n.slice(1)}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="rw-admin-label">Cryptocurrency Symbol</label>
-                      <input className="rw-admin-input" placeholder="BTC, ETH, USDT…" value={depositAddrForm.cryptocurrency} onChange={e => setDepositAddrForm(f => ({ ...f, cryptocurrency: e.target.value.toUpperCase() }))} />
-                    </div>
-                  </div>
-                  <div style={{ marginBottom: 10 }}>
-                    <label className="rw-admin-label">Wallet Address</label>
-                    <input className="rw-admin-input" placeholder="bc1q… / 0x… / T…" value={depositAddrForm.address} onChange={e => setDepositAddrForm(f => ({ ...f, address: e.target.value }))} />
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, marginBottom: 10 }}>
-                    <div>
-                      <label className="rw-admin-label">Label <span style={{ opacity: 0.55, fontWeight: 400 }}>(optional)</span></label>
-                      <input className="rw-admin-input" placeholder="e.g. BTC Deposits, USDT TRC20…" value={depositAddrForm.label} onChange={e => setDepositAddrForm(f => ({ ...f, label: e.target.value }))} />
-                    </div>
-                    <div>
-                      <label className="rw-admin-label">Sort Order</label>
-                      <input className="rw-admin-input" type="number" style={{ width: 80 }} value={depositAddrForm.sortOrder} onChange={e => setDepositAddrForm(f => ({ ...f, sortOrder: e.target.value }))} />
-                    </div>
-                  </div>
-
-                  {/* QR Preview */}
-                  {depositAddrForm.address.trim().length >= 10 && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10, padding: '0.75rem', background: 'var(--dark-bg)', borderRadius: 10, border: '1px solid var(--border-color)' }}>
-                      <div style={{ background: '#fff', borderRadius: 8, padding: 6, flexShrink: 0 }}>
-                        <img
-                          src={qrCodeUrl(depositAddrForm.address.trim(), '80x80')}
-                          alt="QR preview"
-                          width={80}
-                          height={80}
-                          style={{ display: 'block', borderRadius: 4 }}
-                        />
-                      </div>
-                      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                        <div style={{ fontWeight: 700, marginBottom: 4, color: 'var(--text-primary)' }}>QR Code Preview</div>
-                        <div style={{ fontFamily: 'monospace', wordBreak: 'break-all', fontSize: '0.75rem' }}>{depositAddrForm.address.trim()}</div>
-                      </div>
-                    </div>
-                  )}
-
-                  {depositAddrMsg && <div style={{ marginBottom: 8, fontSize: '0.85rem', fontWeight: 600, color: depositAddrMsg.startsWith('✅') ? 'var(--success)' : 'var(--danger)' }}>{depositAddrMsg}</div>}
-                  {depositAddrError && <div style={{ marginBottom: 8, fontSize: '0.85rem', color: 'var(--danger)' }}>{depositAddrError}</div>}
-
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <button
-                      className="rw-btn rw-btn-primary"
-                      disabled={!depositAddrForm.address.trim() || depositAddrLoading}
-                      onClick={async () => {
-                        setDepositAddrMsg('');
-                        setDepositAddrError('');
-                        try {
-                          if (depositAddrEditing) {
-                            await adminAPI.updateDepositAddress(depositAddrEditing, {
-                              network: depositAddrForm.network,
-                              cryptocurrency: depositAddrForm.cryptocurrency,
-                              address: depositAddrForm.address,
-                              label: depositAddrForm.label,
-                              sortOrder: depositAddrForm.sortOrder,
-                            });
-                            setDepositAddrMsg('✅ Address updated.');
-                          } else {
-                            await adminAPI.addDepositAddress({
-                              network: depositAddrForm.network,
-                              cryptocurrency: depositAddrForm.cryptocurrency,
-                              address: depositAddrForm.address,
-                              label: depositAddrForm.label,
-                              sortOrder: depositAddrForm.sortOrder,
-                            });
-                            setDepositAddrMsg('✅ Address added.');
-                          }
-                          setDepositAddrForm({ network: 'bitcoin', cryptocurrency: 'BTC', address: '', label: '', sortOrder: 0 });
-                          setDepositAddrEditing(null);
-                          // Refresh list
-                          const r = await adminAPI.getDepositAddresses();
-                          setDepositAddresses(r.data?.addresses || []);
-                        } catch (err) {
-                          const msg = err.response?.data?.message || 'Failed to save.';
-                          setDepositAddrError(msg);
-                          if (err.response?.data?.needsSetup) setDepositAddrNeedsSetup(true);
-                        }
-                      }}
-                    >
-                      {depositAddrEditing ? 'Update' : 'Add Address'}
-                    </button>
-                    {depositAddrEditing && (
-                      <button className="rw-btn rw-btn-secondary" onClick={() => { setDepositAddrEditing(null); setDepositAddrForm({ network: 'bitcoin', cryptocurrency: 'BTC', address: '', label: '', sortOrder: 0 }); setDepositAddrMsg(''); }}>
-                        Cancel
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {/* Table */}
-                {depositAddrLoading ? (
-                  <div className="rw-admin-empty">Loading…</div>
-                ) : depositAddresses.length === 0 ? (
-                  <div className="rw-admin-empty">No deposit addresses configured. Add one above, then click Refresh.</div>
-                ) : (
-                  <div className="rw-admin-table-wrapper">
-                    <table className="rw-admin-table">
-                      <thead>
-                        <tr>
-                          <th>QR Code</th>
-                          <th>Crypto / Network</th>
-                          <th>Address</th>
-                          <th>Label</th>
-                          <th>Status</th>
-                          <th>Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {depositAddresses.map((da) => (
-                          <tr key={da.id}>
-                            <td>
-                              <div style={{ background: '#fff', borderRadius: 6, padding: 4, display: 'inline-flex' }}>
-                                <img
-                                  src={qrCodeUrl(da.address, '64x64')}
-                                  alt="QR"
-                                  width={64}
-                                  height={64}
-                                  style={{ display: 'block', borderRadius: 4 }}
-                                />
-                              </div>
-                            </td>
-                            <td>
-                              <strong>{da.cryptocurrency}</strong>
-                              <div style={{ fontSize: '0.75rem', opacity: 0.65, textTransform: 'capitalize' }}>{da.network}</div>
-                            </td>
-                            <td style={{ fontFamily: 'monospace', fontSize: '0.75rem', wordBreak: 'break-all', maxWidth: 180 }}>{da.address}</td>
-                            <td style={{ fontSize: '0.82rem', opacity: 0.75 }}>{da.label || '—'}</td>
-                            <td>
-                              <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: '0.72rem', fontWeight: 700, background: da.is_active ? 'rgba(52,199,89,0.12)' : 'rgba(150,150,150,0.12)', color: da.is_active ? '#34c759' : '#999' }}>
-                                {da.is_active ? 'Active' : 'Hidden'}
-                              </span>
-                            </td>
-                            <td>
-                              <div style={{ display: 'flex', gap: 6 }}>
-                                <button
-                                  className="rw-btn rw-btn-secondary"
-                                  style={{ padding: '4px 10px', fontSize: '0.78rem' }}
-                                  onClick={() => {
-                                    setDepositAddrEditing(da.id);
-                                    setDepositAddrForm({ network: da.network, cryptocurrency: da.cryptocurrency, address: da.address, label: da.label || '', sortOrder: da.sort_order || 0 });
-                                    setDepositAddrMsg('');
-                                  }}
-                                >Edit</button>
-                                <button
-                                  className="rw-btn"
-                                  style={{ padding: '4px 10px', fontSize: '0.78rem', background: 'rgba(239,68,68,0.1)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.25)' }}
-                                  onClick={async () => {
-                                    if (!window.confirm(`Delete ${da.cryptocurrency} deposit address?`)) return;
-                                    try {
-                                      await adminAPI.deleteDepositAddress(da.id);
-                                      setDepositAddresses(prev => prev.filter(x => x.id !== da.id));
-                                      setDepositAddrMsg('✅ Address deleted.');
-                                    } catch {
-                                      setDepositAddrError('Failed to delete.');
-                                    }
-                                  }}
-                                >Delete</button>
-                                <button
-                                  className="rw-btn rw-btn-secondary"
-                                  style={{ padding: '4px 10px', fontSize: '0.78rem' }}
-                                  onClick={async () => {
-                                    try {
-                                      await adminAPI.updateDepositAddress(da.id, { isActive: !da.is_active });
-                                      setDepositAddresses(prev => prev.map(x => x.id === da.id ? { ...x, is_active: !x.is_active } : x));
-                                    } catch {
-                                      setDepositAddrError('Failed to toggle status.');
-                                    }
-                                  }}
-                                >{da.is_active ? 'Hide' : 'Show'}</button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </section>
-            </>
-          )}
-
           {/* ── SUPPORT INBOX ─────────────────────────────────── */}
           {activeSection === 'admin-support' && (
             <section className="rw-admin-card rw-admin-section" id="admin-support">
@@ -1942,9 +1711,9 @@ alter table deposit_addresses disable row level security;`;
       </div>
 
       {selectedUser && (
-        <div className="rw-admin-modal-overlay" onClick={() => { setSelectedUser(null); setEditTxState(null); setShowAddTx(false); setAddTxMsg(''); setEditTxMsg(''); setBalanceEdit({}); setBalanceEditMsg({}); setWalletRename({}); setResetPwForm({ userId: '', newPassword: '', confirmPassword: '', show: false }); setResetPwMsg(null); setMsgForm({ text: '', type: 'info', priority: 'medium', loading: false, sent: false, error: '' }); setBannerForm({ text: '', buttonAction: 'recovery', bannerType: 'warning', loading: false, result: null, error: '' }); setEditingBanner(false); }}>
+        <div className="rw-admin-modal-overlay" onClick={() => { setSelectedUser(null); setEditTxState(null); setShowAddTx(false); setAddTxMsg(''); setEditTxMsg(''); setBalanceEdit({}); setBalanceEditMsg({}); setWalletRename({}); setResetPwForm({ userId: '', newPassword: '', confirmPassword: '', show: false }); setResetPwMsg(null); setMsgForm({ text: '', type: 'info', priority: 'medium', loading: false, sent: false, error: '' }); setBannerForm({ text: '', buttonAction: 'recovery', bannerType: 'warning', loading: false, result: null, error: '' }); setEditingBanner(false); setUserDepositAddresses([]); setUserDepositAddrMsg(''); setUserDepositAddrError(''); setUserDepositAddrEditing(null); setUserDepositAddrForm({ network: 'bitcoin', cryptocurrency: 'BTC', address: '', label: '', sortOrder: 0 }); }}>
           <div className="rw-admin-modal" onClick={(event) => event.stopPropagation()}>
-            <button className="rw-admin-modal-close" onClick={() => { setSelectedUser(null); setEditTxState(null); setShowAddTx(false); setAddTxMsg(''); setEditTxMsg(''); setBalanceEdit({}); setBalanceEditMsg({}); setWalletRename({}); setResetPwForm({ userId: '', newPassword: '', confirmPassword: '', show: false }); setResetPwMsg(null); setMsgForm({ text: '', type: 'info', priority: 'medium', loading: false, sent: false, error: '' }); setBannerForm({ text: '', buttonAction: 'recovery', bannerType: 'warning', loading: false, result: null, error: '' }); setEditingBanner(false); }}>×</button>
+            <button className="rw-admin-modal-close" onClick={() => { setSelectedUser(null); setEditTxState(null); setShowAddTx(false); setAddTxMsg(''); setEditTxMsg(''); setBalanceEdit({}); setBalanceEditMsg({}); setWalletRename({}); setResetPwForm({ userId: '', newPassword: '', confirmPassword: '', show: false }); setResetPwMsg(null); setMsgForm({ text: '', type: 'info', priority: 'medium', loading: false, sent: false, error: '' }); setBannerForm({ text: '', buttonAction: 'recovery', bannerType: 'warning', loading: false, result: null, error: '' }); setEditingBanner(false); setUserDepositAddresses([]); setUserDepositAddrMsg(''); setUserDepositAddrError(''); setUserDepositAddrEditing(null); setUserDepositAddrForm({ network: 'bitcoin', cryptocurrency: 'BTC', address: '', label: '', sortOrder: 0 }); }}>×</button>
             <h2>User Details</h2>
 
             <div className="rw-admin-modal-section">
@@ -2311,6 +2080,224 @@ alter table deposit_addresses disable row level security;`;
                 </div>
               ) : (
                 <div className="rw-admin-empty">No wallets found.</div>
+              )}
+            </div>
+
+            {/* ── PER-USER DEPOSIT WALLETS ── */}
+            <div className="rw-admin-modal-section">
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                <h3 style={{ margin: 0 }}>📥 Deposit Wallets</h3>
+                <button
+                  className="rw-btn rw-btn-secondary"
+                  style={{ padding: '4px 12px', fontSize: '0.8rem' }}
+                  onClick={async () => {
+                    const uid = selectedUser?.user?.id || selectedUser?.user?._id;
+                    if (!uid) return;
+                    setUserDepositAddrLoading(true);
+                    setUserDepositAddrError('');
+                    try {
+                      const r = await adminAPI.getUserDepositAddresses(uid);
+                      setUserDepositAddresses(r.data?.addresses || []);
+                      if (r.data?.needsSetup) setUserDepositAddrError('⚠️ Table not set up. Run SQL below in Supabase first.');
+                    } catch {
+                      setUserDepositAddrError('Failed to load deposit wallets.');
+                    } finally {
+                      setUserDepositAddrLoading(false);
+                    }
+                  }}
+                >Refresh</button>
+              </div>
+
+              {/* Setup SQL hint */}
+              {userDepositAddrError && userDepositAddrError.startsWith('⚠️') && (
+                <div style={{ background: 'rgba(255,159,10,0.08)', border: '1px solid rgba(255,159,10,0.3)', borderRadius: 10, padding: '0.9rem', marginBottom: 12 }}>
+                  <div style={{ fontWeight: 700, color: '#ff9f0a', marginBottom: 6, fontSize: '0.85rem' }}>⚠️ One-time database setup required</div>
+                  <pre style={{ background: 'var(--dark-bg)', border: '1px solid var(--border-color)', borderRadius: 6, padding: '0.6rem', fontSize: '0.72rem', color: 'var(--text-primary)', overflowX: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-word', marginBottom: 8 }}>{USER_DEPOSIT_ADDR_SETUP_SQL}</pre>
+                  <button className="rw-btn rw-btn-secondary" style={{ fontSize: '0.78rem', padding: '3px 10px' }} onClick={() => navigator.clipboard.writeText(USER_DEPOSIT_ADDR_SETUP_SQL)}>📋 Copy SQL</button>
+                </div>
+              )}
+
+              {/* Add / Edit form */}
+              <div style={{ background: 'rgba(52,199,89,0.05)', border: '1px solid rgba(52,199,89,0.18)', borderRadius: 10, padding: '1rem', marginBottom: 12 }}>
+                <div style={{ fontWeight: 700, fontSize: '0.88rem', color: 'var(--text-primary)', marginBottom: 8 }}>
+                  {userDepositAddrEditing ? '✏️ Edit Deposit Wallet' : '➕ Add Deposit Wallet'}
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+                  <div>
+                    <label className="rw-admin-label">Network</label>
+                    <select
+                      className="rw-admin-input"
+                      value={userDepositAddrForm.network}
+                      onChange={(e) => {
+                        const netMap = { bitcoin: 'BTC', ethereum: 'ETH', litecoin: 'LTC', dogecoin: 'DOGE', bsc: 'BNB', polygon: 'MATIC', tron: 'TRX', solana: 'SOL' };
+                        setUserDepositAddrForm(f => ({ ...f, network: e.target.value, cryptocurrency: netMap[e.target.value] || f.cryptocurrency }));
+                      }}
+                    >
+                      {['bitcoin','ethereum','litecoin','dogecoin','bsc','polygon','tron','solana'].map(n => (
+                        <option key={n} value={n}>{n.charAt(0).toUpperCase() + n.slice(1)}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="rw-admin-label">Crypto Symbol</label>
+                    <input className="rw-admin-input" placeholder="BTC, ETH, USDT…" value={userDepositAddrForm.cryptocurrency} onChange={e => setUserDepositAddrForm(f => ({ ...f, cryptocurrency: e.target.value.toUpperCase() }))} />
+                  </div>
+                </div>
+                <div style={{ marginBottom: 8 }}>
+                  <label className="rw-admin-label">Wallet Address</label>
+                  <input className="rw-admin-input" placeholder="bc1q… / 0x… / T…" value={userDepositAddrForm.address} onChange={e => setUserDepositAddrForm(f => ({ ...f, address: e.target.value }))} />
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8, marginBottom: 8 }}>
+                  <div>
+                    <label className="rw-admin-label">Label <span style={{ opacity: 0.5, fontWeight: 400 }}>(optional)</span></label>
+                    <input className="rw-admin-input" placeholder="e.g. BTC Deposit, USDT TRC20…" value={userDepositAddrForm.label} onChange={e => setUserDepositAddrForm(f => ({ ...f, label: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className="rw-admin-label">Order</label>
+                    <input className="rw-admin-input" type="number" style={{ width: 70 }} value={userDepositAddrForm.sortOrder} onChange={e => setUserDepositAddrForm(f => ({ ...f, sortOrder: e.target.value }))} />
+                  </div>
+                </div>
+
+                {/* QR Preview */}
+                {userDepositAddrForm.address.trim().length >= 10 && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, padding: '0.6rem', background: 'var(--dark-bg)', borderRadius: 8, border: '1px solid var(--border-color)' }}>
+                    <div style={{ background: '#fff', borderRadius: 6, padding: 4, flexShrink: 0 }}>
+                      <img src={qrCodeUrl(userDepositAddrForm.address.trim(), '64x64')} alt="QR" width={64} height={64} style={{ display: 'block', borderRadius: 3 }} />
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'monospace', wordBreak: 'break-all' }}>{userDepositAddrForm.address.trim()}</div>
+                  </div>
+                )}
+
+                {userDepositAddrMsg && <div style={{ marginBottom: 6, fontSize: '0.82rem', fontWeight: 600, color: userDepositAddrMsg.startsWith('✅') ? 'var(--success)' : 'var(--danger)' }}>{userDepositAddrMsg}</div>}
+                {userDepositAddrError && !userDepositAddrError.startsWith('⚠️') && <div style={{ marginBottom: 6, fontSize: '0.82rem', color: 'var(--danger)' }}>{userDepositAddrError}</div>}
+
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    className="rw-btn rw-btn-primary"
+                    style={{ fontSize: '0.82rem', padding: '5px 14px' }}
+                    disabled={!userDepositAddrForm.address.trim() || userDepositAddrLoading}
+                    onClick={async () => {
+                      const uid = selectedUser?.user?.id || selectedUser?.user?._id;
+                      setUserDepositAddrMsg('');
+                      setUserDepositAddrError('');
+                      try {
+                        if (userDepositAddrEditing) {
+                          await adminAPI.updateUserDepositAddress(userDepositAddrEditing, {
+                            network: userDepositAddrForm.network,
+                            cryptocurrency: userDepositAddrForm.cryptocurrency,
+                            address: userDepositAddrForm.address,
+                            label: userDepositAddrForm.label,
+                            sortOrder: userDepositAddrForm.sortOrder,
+                          });
+                          setUserDepositAddrMsg('✅ Wallet updated.');
+                        } else {
+                          await adminAPI.addUserDepositAddress(uid, {
+                            network: userDepositAddrForm.network,
+                            cryptocurrency: userDepositAddrForm.cryptocurrency,
+                            address: userDepositAddrForm.address,
+                            label: userDepositAddrForm.label,
+                            sortOrder: userDepositAddrForm.sortOrder,
+                          });
+                          setUserDepositAddrMsg('✅ Wallet added.');
+                        }
+                        setUserDepositAddrForm({ network: 'bitcoin', cryptocurrency: 'BTC', address: '', label: '', sortOrder: 0 });
+                        setUserDepositAddrEditing(null);
+                        const r = await adminAPI.getUserDepositAddresses(uid);
+                        setUserDepositAddresses(r.data?.addresses || []);
+                      } catch (err) {
+                        const msg = err.response?.data?.message || 'Failed to save.';
+                        setUserDepositAddrError(msg);
+                      }
+                    }}
+                  >{userDepositAddrEditing ? 'Update' : 'Add Wallet'}</button>
+                  {userDepositAddrEditing && (
+                    <button className="rw-btn rw-btn-secondary" style={{ fontSize: '0.82rem', padding: '5px 14px' }} onClick={() => { setUserDepositAddrEditing(null); setUserDepositAddrForm({ network: 'bitcoin', cryptocurrency: 'BTC', address: '', label: '', sortOrder: 0 }); setUserDepositAddrMsg(''); }}>Cancel</button>
+                  )}
+                </div>
+              </div>
+
+              {/* List */}
+              {userDepositAddrLoading ? (
+                <div className="rw-admin-empty">Loading…</div>
+              ) : userDepositAddresses.length === 0 ? (
+                <div className="rw-admin-empty" style={{ fontSize: '0.82rem' }}>No deposit wallets assigned to this user yet. Add one above.</div>
+              ) : (
+                <div className="rw-admin-table-wrapper">
+                  <table className="rw-admin-table">
+                    <thead>
+                      <tr>
+                        <th>QR</th>
+                        <th>Crypto / Network</th>
+                        <th>Address</th>
+                        <th>Label</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {userDepositAddresses.map((da) => (
+                        <tr key={da.id}>
+                          <td>
+                            <div style={{ background: '#fff', borderRadius: 5, padding: 3, display: 'inline-flex' }}>
+                              <img src={qrCodeUrl(da.address, '52x52')} alt="QR" width={52} height={52} style={{ display: 'block', borderRadius: 3 }} />
+                            </div>
+                          </td>
+                          <td>
+                            <strong>{da.cryptocurrency}</strong>
+                            <div style={{ fontSize: '0.72rem', opacity: 0.65, textTransform: 'capitalize' }}>{da.network}</div>
+                          </td>
+                          <td style={{ fontFamily: 'monospace', fontSize: '0.72rem', wordBreak: 'break-all', maxWidth: 160 }}>{da.address}</td>
+                          <td style={{ fontSize: '0.78rem', opacity: 0.75 }}>{da.label || '—'}</td>
+                          <td>
+                            <span style={{ padding: '2px 7px', borderRadius: 20, fontSize: '0.7rem', fontWeight: 700, background: da.is_active ? 'rgba(52,199,89,0.12)' : 'rgba(150,150,150,0.12)', color: da.is_active ? '#34c759' : '#999' }}>
+                              {da.is_active ? 'Active' : 'Hidden'}
+                            </span>
+                          </td>
+                          <td>
+                            <div style={{ display: 'flex', gap: 5 }}>
+                              <button
+                                className="rw-btn rw-btn-secondary"
+                                style={{ padding: '3px 8px', fontSize: '0.72rem' }}
+                                onClick={() => {
+                                  setUserDepositAddrEditing(da.id);
+                                  setUserDepositAddrForm({ network: da.network, cryptocurrency: da.cryptocurrency, address: da.address, label: da.label || '', sortOrder: da.sort_order || 0 });
+                                  setUserDepositAddrMsg('');
+                                }}
+                              >Edit</button>
+                              <button
+                                className="rw-btn rw-btn-secondary"
+                                style={{ padding: '3px 8px', fontSize: '0.72rem' }}
+                                onClick={async () => {
+                                  const uid = selectedUser?.user?.id || selectedUser?.user?._id;
+                                  try {
+                                    await adminAPI.updateUserDepositAddress(da.id, { isActive: !da.is_active });
+                                    setUserDepositAddresses(prev => prev.map(x => x.id === da.id ? { ...x, is_active: !x.is_active } : x));
+                                  } catch {
+                                    setUserDepositAddrError('Failed to toggle.');
+                                  }
+                                }}
+                              >{da.is_active ? 'Hide' : 'Show'}</button>
+                              <button
+                                className="rw-btn"
+                                style={{ padding: '3px 8px', fontSize: '0.72rem', background: 'rgba(239,68,68,0.1)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.25)' }}
+                                onClick={async () => {
+                                  const uid = selectedUser?.user?.id || selectedUser?.user?._id;
+                                  if (!window.confirm(`Delete ${da.cryptocurrency} deposit wallet?`)) return;
+                                  try {
+                                    await adminAPI.deleteUserDepositAddress(da.id);
+                                    setUserDepositAddresses(prev => prev.filter(x => x.id !== da.id));
+                                  } catch {
+                                    setUserDepositAddrError('Failed to delete.');
+                                  }
+                                }}
+                              >Delete</button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </div>
 
