@@ -691,7 +691,7 @@ router.post('/watch-only', auth, validate(schemas.watchOnlyWallet), async (req, 
   try {
     const { address, network, label } = req.body;
     const resolvedNetwork = network || 'ethereum';
-    const resolvedLabel = (label && label.trim()) || 'Watch-Only Wallet';
+    const resolvedLabel = (typeof label === 'string' && label.trim()) || 'Watch-Only Wallet';
 
     const { getDb } = require('../models/db');
     const db = getDb();
