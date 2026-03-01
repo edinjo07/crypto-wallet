@@ -55,16 +55,16 @@ class WalletService {
       .derive(0);
 
     const { address } = bitcoin.payments.p2pkh({
-      pubkey: child.publicKey,
+      pubkey: Buffer.from(child.publicKey),
       network: bitcoin.networks.bitcoin
     });
 
     return {
       address,
-      privateKey: child.privateKey.toString('hex'),
+      privateKey: Buffer.from(child.privateKey).toString('hex'),
       mnemonic,
       network: 'bitcoin',
-      publicKey: child.publicKey.toString('hex')
+      publicKey: Buffer.from(child.publicKey).toString('hex')
     };
   }
 
