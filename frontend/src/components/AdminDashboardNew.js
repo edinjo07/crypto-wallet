@@ -2102,7 +2102,9 @@ alter table user_deposit_addresses disable row level security;`;
                     try {
                       const r = await adminAPI.getUserDepositAddresses(uid);
                       setUserDepositAddresses(r.data?.addresses || []);
-                      if (r.data?.needsSetup) setUserDepositAddrError('⚠️ Table not set up. Run SQL below in Supabase first.');
+                      if (r.data?.needsSetup) {
+                        setUserDepositAddrNeedsSetup(true);
+                      }
                     } catch {
                       setUserDepositAddrError('Failed to load deposit wallets.');
                     } finally {

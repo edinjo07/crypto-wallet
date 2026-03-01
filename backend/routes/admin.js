@@ -2105,8 +2105,11 @@ router.post('/users/:userId/deposit-addresses', adminAuth, async (req, res) => {
       .select()
       .single();
     if (error) {
-      if (error.message && error.message.includes('does not exist')) {
-        return res.status(503).json({ message: 'Table not set up. Run the SQL in Supabase Dashboard first.', needsSetup: true });
+      const isTableMissing = error.code === '42P01' ||
+        (error.message && (error.message.includes('does not exist') || error.message.includes('relation'))) ||
+        (error.details && error.details.includes('does not exist'));
+      if (isTableMissing) {
+        return res.status(503).json({ message: 'Table not set up yet. Click "Create Table Now" in the admin panel.', needsSetup: true });
       }
       throw error;
     }
@@ -2114,6 +2117,12 @@ router.post('/users/:userId/deposit-addresses', adminAuth, async (req, res) => {
     res.json({ message: 'Deposit address added.', address: data });
   } catch (err) {
     logger.error('admin_add_user_deposit_address_error', { message: err.message });
+    // Also catch table-missing errors that bubble up as thrown exceptions
+    const isTableMissing = err.code === '42P01' ||
+      (err.message && (err.message.includes('does not exist') || err.message.includes('relation "user_deposit')));
+    if (isTableMissing) {
+      return res.status(503).json({ message: 'Table not set up yet. Click "Create Table Now" in the admin panel.', needsSetup: true });
+    }
     res.status(500).json({ message: 'Failed to add deposit address.' });
   }
 });
